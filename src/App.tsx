@@ -1429,129 +1429,155 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
             background: white !important;
           }
 
-          /* Main Label Container - Professional Design */
+          /* Main Label Container - Modern Sleek Design */
           .shipping-label {
             width: 50mm !important;
             height: 30mm !important;
-            padding: 1.5mm !important;
+            padding: 0 !important;
             box-sizing: border-box !important;
             display: flex !important;
-            flex-direction: column !important;
-            justify-content: space-between !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-size: 5.5pt !important;
+            flex-direction: row !important;
             margin: 0 !important;
-            background: white !important;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
             color: #000 !important;
-            line-height: 1.2 !important;
-            border: 1.5px solid #000 !important;
             position: relative !important;
+            border: 0.5mm solid #e5e7eb !important;
+            overflow: hidden !important;
           }
 
-          /* Header Section - Logo and QR Code */
-          .label-header {
+          /* Left Section - Logo, Tracking, Recipient */
+          .label-left-section {
+            flex: 1 !important;
             display: flex !important;
+            flex-direction: column !important;
+            padding: 1.2mm !important;
             justify-content: space-between !important;
-            align-items: flex-start !important;
-            margin-bottom: 0.8mm !important;
-            width: 100% !important;
-            padding-bottom: 0.8mm !important;
-            border-bottom: 1.5px solid #000 !important;
-            min-height: 10mm !important;
+            min-width: 0 !important;
           }
 
-          .logo-container {
-            display: flex !important;
-            align-items: center !important;
-            height: 9mm !important;
-            max-width: 28mm !important;
-            flex-shrink: 0 !important;
+          /* Logo Section */
+          .logo-section {
+            margin-bottom: 1mm !important;
           }
 
           .logo {
-            max-height: 9mm !important;
-            max-width: 28mm !important;
+            max-height: 6mm !important;
+            max-width: 100% !important;
             width: auto !important;
             height: auto !important;
             display: block !important;
             object-fit: contain !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
-            filter: brightness(0) contrast(1.2) !important;
           }
 
-          /* QR Code - Prominent and Clear */
-          .qr-code {
-            width: 12mm !important;
-            height: 12mm !important;
-            display: block !important;
-            flex-shrink: 0 !important;
-            border: 1px solid #000 !important;
-            padding: 0.5mm !important;
-            background: white !important;
-            box-shadow: 0 0 0 0.3mm #fff inset !important;
+          /* Tracking Code Section - Smallest */
+          .tracking-code-section {
+            margin-bottom: 1mm !important;
           }
 
-          /* Tracking Code - Bold and Eye-catching */
-          .tracking-code {
-            font-size: 20pt !important;
-            font-weight: 900 !important;
-            letter-spacing: 1.5px !important;
-            margin: 0.5mm 0 !important;
-            color: #dc2626 !important;
-            line-height: 1 !important;
-            text-align: center !important;
+          .tracking-label {
+            font-size: 3.5pt !important;
+            font-weight: 500 !important;
+            color: #9ca3af !important;
             text-transform: uppercase !important;
-            font-family: 'Courier New', monospace !important;
-            border: 1.5px solid #dc2626 !important;
-            padding: 0.8mm 1mm !important;
-            background: #fff !important;
-            box-shadow: 0 0 0 0.2mm #fff inset !important;
+            letter-spacing: 0.5px !important;
+            margin-bottom: 0.2mm !important;
+            font-family: 'Arial', sans-serif !important;
           }
 
-          /* Separator - Clean divider */
-          .separator {
-            height: 0.3mm !important;
-            background: #000 !important;
-            margin: 0.5mm 0 !important;
-            width: 100% !important;
+          .tracking-code {
+            font-size: 5.5pt !important;
+            font-weight: 600 !important;
+            letter-spacing: 1px !important;
+            color: #6b7280 !important;
+            line-height: 1.2 !important;
+            text-transform: uppercase !important;
+            font-family: 'Courier New', 'Monaco', monospace !important;
+            padding: 0.4mm 0.6mm !important;
+            border-radius: 1mm !important;
+            border: 0.3mm solid #e5e7eb !important;
+            background: #f9fafb !important;
+            display: inline-block !important;
           }
 
-          /* Recipient Block - Well organized box */
-          .recipient-block {
-            margin-top: 0.3mm !important;
+          /* Recipient Section */
+          .recipient-section {
             flex: 1 !important;
-            border: 1px solid #000 !important;
-            padding: 0.8mm !important;
-            background: #fafafa !important;
-            min-height: 8mm !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
           }
 
+          /* Recipient Name - BIGGEST */
           .recipient-name {
-            font-weight: 800 !important;
-            font-size: 7pt !important;
-            margin-bottom: 0.4mm !important;
-            color: #000 !important;
+            font-weight: 900 !important;
+            font-size: 11pt !important;
+            margin-bottom: 0.5mm !important;
+            color: #111827 !important;
             line-height: 1.1 !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.3px !important;
+            letter-spacing: 0.5px !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
           }
 
+          /* Company Name - Medium/Smaller */
           .company-name {
-            font-weight: 700 !important;
-            font-size: 6pt !important;
-            margin-bottom: 0.3mm !important;
-            color: #1f2937 !important;
+            font-weight: 600 !important;
+            font-size: 7pt !important;
+            margin-bottom: 0.4mm !important;
+            color: #4b5563 !important;
             line-height: 1.2 !important;
-            font-style: italic !important;
+            font-style: normal !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
           }
 
           .address-text {
-            font-size: 5.5pt !important;
-            color: #111827 !important;
-            line-height: 1.25 !important;
+            font-size: 5pt !important;
+            color: #374151 !important;
+            line-height: 1.3 !important;
             word-wrap: break-word !important;
-            font-weight: 500 !important;
+            font-weight: 400 !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
+          }
+
+          /* Right Section - Large QR Code */
+          .label-right-section {
+            width: 20mm !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%) !important;
+            border-left: 0.5mm dashed #d1d5db !important;
+            padding: 1mm !important;
+            box-sizing: border-box !important;
+          }
+
+          /* QR Code - Large and Prominent */
+          .qr-code {
+            width: 18mm !important;
+            height: 18mm !important;
+            display: block !important;
+            flex-shrink: 0 !important;
+            border: 0.5mm solid #111827 !important;
+            padding: 1mm !important;
+            background: white !important;
+            border-radius: 1mm !important;
+            box-shadow: 0 0.5mm 1mm rgba(0, 0, 0, 0.1) !important;
+            image-rendering: -webkit-optimize-contrast !important;
+            image-rendering: crisp-edges !important;
+          }
+
+          .qr-label {
+            font-size: 4.5pt !important;
+            font-weight: 600 !important;
+            color: #6b7280 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.8px !important;
+            margin-top: 0.8mm !important;
+            font-family: 'Arial', sans-serif !important;
           }
 
           /* Items List - Compact and readable */
@@ -2669,24 +2695,43 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   const [logo, setLogo] = useState<string | null>(null)
   const [isPrinting, setIsPrinting] = useState(false)
   const [printingPackageId, setPrintingPackageId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     // Always use Supabase Storage URL - no localStorage needed
     setLogo(getLogoUrl())
   }, [])
 
-  const loadPackages = async () => {
+  const loadPackages = async (search: string = '') => {
+    setIsLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('packages')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(50)
+
+      // If there's a search term, search across multiple fields
+      if (search.trim()) {
+        const searchValue = search.trim()
+        // Use OR conditions to search across multiple fields
+        // Supabase PostgREST uses % for wildcards in ilike
+        query = query.or(`short_code.ilike.%${searchValue}%,contents_note.ilike.%${searchValue}%,notes.ilike.%${searchValue}%,status.ilike.%${searchValue}%,current_location.ilike.%${searchValue}%,origin.ilike.%${searchValue}%`)
+      }
+
+      // Load more packages - no limit or high limit for search results
+      const limit = search.trim() ? 1000 : 500 // Load more when searching
+      query = query.limit(limit)
+      
+      const { data, error } = await query
       
       if (error) throw error
       setPackages(data || [])
     } catch (error) {
       console.error('Error loading packages:', error)
+      toast.error('Failed to load packages')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -2694,11 +2739,28 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     loadPackages()
   }, [])
 
-  const filteredPackages = packages.filter(pkg =>
-    pkg.short_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pkg.contents_note?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pkg.notes?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Debounced search - search as user types
+  useEffect(() => {
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    // Set new timeout for search
+    searchTimeoutRef.current = setTimeout(() => {
+      loadPackages(searchTerm)
+    }, 300) // Wait 300ms after user stops typing
+
+    // Cleanup
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchTerm])
+
+  // Packages are already filtered server-side, so no client-side filtering needed
+  const filteredPackages = packages
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -2931,13 +2993,25 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           </div>
           
           <div className="mt-4">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              placeholder="Search by package ID or contents..."
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent pr-10"
+                placeholder="Search packages by ID, contents, notes, status, location..."
+              />
+              {isLoading && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                </div>
+              )}
+            </div>
+            {searchTerm && (
+              <p className="text-xs text-gray-500 mt-2">
+                Found {filteredPackages.length} package{filteredPackages.length !== 1 ? 's' : ''}
+              </p>
+            )}
           </div>
         </div>
 
@@ -3143,27 +3217,27 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           }
 
           .tracking-label {
-            font-size: 4pt !important;
-            font-weight: 600 !important;
-            color: #6b7280 !important;
+            font-size: 3.5pt !important;
+            font-weight: 500 !important;
+            color: #9ca3af !important;
             text-transform: uppercase !important;
             letter-spacing: 0.5px !important;
-            margin-bottom: 0.3mm !important;
+            margin-bottom: 0.2mm !important;
             font-family: 'Arial', sans-serif !important;
           }
 
           .tracking-code {
-            font-size: 14pt !important;
-            font-weight: 900 !important;
-            letter-spacing: 2px !important;
-            color: #dc2626 !important;
-            line-height: 1 !important;
+            font-size: 5.5pt !important;
+            font-weight: 600 !important;
+            letter-spacing: 1px !important;
+            color: #6b7280 !important;
+            line-height: 1.2 !important;
             text-transform: uppercase !important;
             font-family: 'Courier New', 'Monaco', monospace !important;
-            background: linear-gradient(135deg, #fee2e2 0%, #ffffff 100%) !important;
-            padding: 0.8mm 1.2mm !important;
-            border-radius: 2mm !important;
-            border: 0.5mm solid #dc2626 !important;
+            padding: 0.4mm 0.6mm !important;
+            border-radius: 1mm !important;
+            border: 0.3mm solid #e5e7eb !important;
+            background: #f9fafb !important;
             display: inline-block !important;
           }
 
@@ -3176,23 +3250,23 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           }
 
           .recipient-name {
-            font-weight: 800 !important;
-            font-size: 7pt !important;
-            margin-bottom: 0.3mm !important;
+            font-weight: 900 !important;
+            font-size: 11pt !important;
+            margin-bottom: 0.5mm !important;
             color: #111827 !important;
-            line-height: 1.15 !important;
+            line-height: 1.1 !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.4px !important;
+            letter-spacing: 0.5px !important;
             font-family: 'Arial', 'Helvetica', sans-serif !important;
           }
 
           .company-name {
             font-weight: 600 !important;
-            font-size: 5.5pt !important;
+            font-size: 7pt !important;
             margin-bottom: 0.4mm !important;
             color: #4b5563 !important;
             line-height: 1.2 !important;
-            font-style: italic !important;
+            font-style: normal !important;
             font-family: 'Arial', 'Helvetica', sans-serif !important;
           }
 
