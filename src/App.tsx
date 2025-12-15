@@ -675,8 +675,8 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
       const qrCodeData = pkg.short_code || pkg.id
       
       await QRCode.toCanvas(canvas, qrCodeData, {
-        width: 150,
-        margin: 1,
+        width: 300,
+        margin: 2,
         color: {
           dark: '#000000',
           light: '#FFFFFF'
@@ -1339,8 +1339,8 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
       <div id="print-label" ref={printRef} className="print-label-container">
         {createdPackage && barcodeDataUrl ? (
           <div className="shipping-label">
-            <div className="label-header">
-              <div className="logo-container">
+            <div className="label-left-section">
+              <div className="logo-section">
                 <img 
                   src={getLogoUrl()} 
                   alt="Sigma Logo" 
@@ -1352,16 +1352,22 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                   }}
                 />
               </div>
-              <img src={barcodeDataUrl} alt="QR Code" className="qr-code" />
+              
+              <div className="tracking-code-section">
+                <div className="tracking-label">TRACKING</div>
+                <div className="tracking-code">{createdPackage.short_code}</div>
+              </div>
+
+              <div className="recipient-section">
+                <div className="recipient-name">{formData.name} {formData.surname}</div>
+                {formData.company && <div className="company-name">{formData.company}</div>}
+                <div className="address-text">{formData.address}</div>
+              </div>
             </div>
 
-            <div className="tracking-code">{createdPackage.short_code}</div>
-            <div className="separator"></div>
-
-            <div className="recipient-block">
-              <div className="recipient-name">{formData.name} {formData.surname}</div>
-              {formData.company && <div className="company-name">{formData.company}</div>}
-              <div className="address-text">{formData.address}</div>
+            <div className="label-right-section">
+              <img src={barcodeDataUrl} alt="QR Code" className="qr-code" />
+              <div className="qr-label">Scan to Track</div>
             </div>
           </div>
         ) : (
@@ -2761,8 +2767,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     try {
       const canvas = document.createElement('canvas')
       await QRCode.toCanvas(canvas, shortCode, {
-        width: 150,
-        margin: 1,
+        width: 300,
+        margin: 2,
         color: {
           dark: '#000000',
           light: '#FFFFFF'
@@ -2799,20 +2805,26 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       
       const printLabelHTML = `
         <div class="shipping-label">
-          <div class="label-header">
-            <div class="logo-container">
-              <img src="${logoSrc}" alt="Sigma Logo" class="logo" width="80" height="80" onerror="this.style.display='none'" />
+          <div class="label-left-section">
+            <div class="logo-section">
+              <img src="${logoSrc}" alt="Sigma Logo" class="logo" onerror="this.style.display='none'" />
             </div>
-            <img src="${qrCodeUrl}" alt="QR Code" class="qr-code" />
+            
+            <div class="tracking-code-section">
+              <div class="tracking-label">TRACKING</div>
+              <div class="tracking-code">${pkg.short_code}</div>
+            </div>
+
+            <div class="recipient-section">
+              ${parsed.name || parsed.surname ? `<div class="recipient-name">${parsed.name} ${parsed.surname}</div>` : ''}
+              ${parsed.company ? `<div class="company-name">${parsed.company}</div>` : ''}
+              ${parsed.address ? `<div class="address-text">${parsed.address}</div>` : ''}
+            </div>
           </div>
 
-          <div class="tracking-code">${pkg.short_code}</div>
-          <div class="separator"></div>
-
-          <div class="recipient-block">
-            ${parsed.name || parsed.surname ? `<div class="recipient-name">${parsed.name} ${parsed.surname}</div>` : ''}
-            ${parsed.company ? `<div class="company-name">${parsed.company}</div>` : ''}
-            ${parsed.address ? `<div class="address-text">${parsed.address}</div>` : ''}
+          <div class="label-right-section">
+            <img src="${qrCodeUrl}" alt="QR Code" class="qr-code" />
+            <div class="qr-label">Scan to Track</div>
           </div>
         </div>
       `
@@ -3083,129 +3095,153 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             background: white !important;
           }
 
-          /* Main Label Container - Professional Design */
+          /* Main Label Container - Modern Sleek Design */
           .shipping-label {
             width: 50mm !important;
             height: 30mm !important;
-            padding: 1.5mm !important;
+            padding: 0 !important;
             box-sizing: border-box !important;
             display: flex !important;
-            flex-direction: column !important;
-            justify-content: space-between !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-size: 5.5pt !important;
+            flex-direction: row !important;
             margin: 0 !important;
-            background: white !important;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
             color: #000 !important;
-            line-height: 1.2 !important;
-            border: 1.5px solid #000 !important;
             position: relative !important;
+            border: 0.5mm solid #e5e7eb !important;
+            overflow: hidden !important;
           }
 
-          /* Header Section - Logo and QR Code */
-          .label-header {
+          /* Left Section - Logo, Tracking, Recipient */
+          .label-left-section {
+            flex: 1 !important;
             display: flex !important;
+            flex-direction: column !important;
+            padding: 1.2mm !important;
             justify-content: space-between !important;
-            align-items: flex-start !important;
-            margin-bottom: 0.8mm !important;
-            width: 100% !important;
-            padding-bottom: 0.8mm !important;
-            border-bottom: 1.5px solid #000 !important;
-            min-height: 10mm !important;
+            min-width: 0 !important;
           }
 
-          .logo-container {
-            display: flex !important;
-            align-items: center !important;
-            height: 9mm !important;
-            max-width: 28mm !important;
-            flex-shrink: 0 !important;
+          /* Logo Section */
+          .logo-section {
+            margin-bottom: 1mm !important;
           }
 
           .logo {
-            max-height: 9mm !important;
-            max-width: 28mm !important;
+            max-height: 6mm !important;
+            max-width: 100% !important;
             width: auto !important;
             height: auto !important;
             display: block !important;
             object-fit: contain !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
-            filter: brightness(0) contrast(1.2) !important;
           }
 
-          /* QR Code - Prominent and Clear */
-          .qr-code {
-            width: 12mm !important;
-            height: 12mm !important;
-            display: block !important;
-            flex-shrink: 0 !important;
-            border: 1px solid #000 !important;
-            padding: 0.5mm !important;
-            background: white !important;
-            box-shadow: 0 0 0 0.3mm #fff inset !important;
+          /* Tracking Code Section */
+          .tracking-code-section {
+            margin-bottom: 1mm !important;
           }
 
-          /* Tracking Code - Bold and Eye-catching */
+          .tracking-label {
+            font-size: 4pt !important;
+            font-weight: 600 !important;
+            color: #6b7280 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+            margin-bottom: 0.3mm !important;
+            font-family: 'Arial', sans-serif !important;
+          }
+
           .tracking-code {
-            font-size: 20pt !important;
+            font-size: 14pt !important;
             font-weight: 900 !important;
-            letter-spacing: 1.5px !important;
-            margin: 0.5mm 0 !important;
+            letter-spacing: 2px !important;
             color: #dc2626 !important;
             line-height: 1 !important;
-            text-align: center !important;
             text-transform: uppercase !important;
-            font-family: 'Courier New', monospace !important;
-            border: 1.5px solid #dc2626 !important;
-            padding: 0.8mm 1mm !important;
-            background: #fff !important;
-            box-shadow: 0 0 0 0.2mm #fff inset !important;
+            font-family: 'Courier New', 'Monaco', monospace !important;
+            background: linear-gradient(135deg, #fee2e2 0%, #ffffff 100%) !important;
+            padding: 0.8mm 1.2mm !important;
+            border-radius: 2mm !important;
+            border: 0.5mm solid #dc2626 !important;
+            display: inline-block !important;
           }
 
-          /* Separator - Clean divider */
-          .separator {
-            height: 0.3mm !important;
-            background: #000 !important;
-            margin: 0.5mm 0 !important;
-            width: 100% !important;
-          }
-
-          /* Recipient Block - Well organized box */
-          .recipient-block {
-            margin-top: 0.3mm !important;
+          /* Recipient Section */
+          .recipient-section {
             flex: 1 !important;
-            border: 1px solid #000 !important;
-            padding: 0.8mm !important;
-            background: #fafafa !important;
-            min-height: 8mm !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
           }
 
           .recipient-name {
             font-weight: 800 !important;
             font-size: 7pt !important;
-            margin-bottom: 0.4mm !important;
-            color: #000 !important;
-            line-height: 1.1 !important;
+            margin-bottom: 0.3mm !important;
+            color: #111827 !important;
+            line-height: 1.15 !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.3px !important;
+            letter-spacing: 0.4px !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
           }
 
           .company-name {
-            font-weight: 700 !important;
-            font-size: 6pt !important;
-            margin-bottom: 0.3mm !important;
-            color: #1f2937 !important;
+            font-weight: 600 !important;
+            font-size: 5.5pt !important;
+            margin-bottom: 0.4mm !important;
+            color: #4b5563 !important;
             line-height: 1.2 !important;
             font-style: italic !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
           }
 
           .address-text {
-            font-size: 5.5pt !important;
-            color: #111827 !important;
-            line-height: 1.25 !important;
+            font-size: 5pt !important;
+            color: #374151 !important;
+            line-height: 1.3 !important;
             word-wrap: break-word !important;
-            font-weight: 500 !important;
+            font-weight: 400 !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
+          }
+
+          /* Right Section - Large QR Code */
+          .label-right-section {
+            width: 20mm !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%) !important;
+            border-left: 0.5mm dashed #d1d5db !important;
+            padding: 1mm !important;
+            box-sizing: border-box !important;
+          }
+
+          /* QR Code - Large and Prominent */
+          .qr-code {
+            width: 18mm !important;
+            height: 18mm !important;
+            display: block !important;
+            flex-shrink: 0 !important;
+            border: 0.5mm solid #111827 !important;
+            padding: 1mm !important;
+            background: white !important;
+            border-radius: 1mm !important;
+            box-shadow: 0 0.5mm 1mm rgba(0, 0, 0, 0.1) !important;
+            image-rendering: -webkit-optimize-contrast !important;
+            image-rendering: crisp-edges !important;
+          }
+
+          .qr-label {
+            font-size: 4.5pt !important;
+            font-weight: 600 !important;
+            color: #6b7280 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.8px !important;
+            margin-top: 0.8mm !important;
+            font-family: 'Arial', sans-serif !important;
           }
 
           /* Items List - Compact and readable */
