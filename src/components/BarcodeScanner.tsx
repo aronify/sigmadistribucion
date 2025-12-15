@@ -200,16 +200,17 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           console.log('Starting camera with facingMode: environment (mobile)')
           
           const mobileConfig: any = {
-            fps: 30,
+            fps: 60, // Increased FPS for faster scanning
             qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
-              // Larger scanning box for mobile (easier to use)
-              const minEdgePercentage = 0.75
+              // Larger scanning box for mobile (easier to use) - use 85% for faster detection
+              const minEdgePercentage = 0.85
               const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight) * minEdgePercentage
               return {
                 width: Math.floor(minEdgeSize),
                 height: Math.floor(minEdgeSize)
               }
-            }
+            },
+            aspectRatio: 1.0
           }
 
           await html5QrCode.start(
@@ -292,10 +293,10 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
       setCameraId(selectedCamera.id)
 
       const config = {
-        fps: 10,
+        fps: 30, // Increased FPS for faster scanning
         qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
-          // Make the scanning box smaller and centered
-          const minEdgePercentage = 0.7 // 70% of the smaller dimension
+          // Larger scanning box for faster detection
+          const minEdgePercentage = 0.8 // 80% of the smaller dimension
           const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight) * minEdgePercentage
           const qrboxSize = Math.floor(minEdgeSize)
           return {
@@ -307,13 +308,13 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
         verbose: false
       }
 
-      // Use simpler configuration for better compatibility
+      // Use optimized configuration for faster scanning
       console.log('Starting camera with device:', selectedCamera.id)
       await html5QrCode.start(
         selectedCamera.id,
         {
           fps: config.fps,
-          qrbox: { width: 250, height: 250 },
+          qrbox: { width: 300, height: 300 }, // Larger box for faster detection
           aspectRatio: config.aspectRatio
         },
           (decodedText, decodedResult) => {
@@ -455,14 +456,14 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
       return
     }
 
-    // Throttle: prevent same code from re-triggering within 3 seconds
-    // Also prevent any scan within 500ms for performance
-    if (lastScanTime && now.getTime() - lastScanTime.getTime() < 500) {
+    // Throttle: prevent same code from re-triggering within 1 second
+    // Also prevent any scan within 100ms for performance (reduced from 500ms for faster response)
+    if (lastScanTime && now.getTime() - lastScanTime.getTime() < 100) {
       return
     }
     
-    // If same code was just scanned, ignore for 3 seconds
-    if (lastScannedCode === normalizedCode && lastScanTime && now.getTime() - lastScanTime.getTime() < 3000) {
+    // If same code was just scanned, ignore for 1 second (reduced from 3 seconds for faster re-scanning)
+    if (lastScannedCode === normalizedCode && lastScanTime && now.getTime() - lastScanTime.getTime() < 1000) {
       return
     }
 
@@ -628,8 +629,8 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
       scannerRef.current = html5QrCode
       
       const config = {
-        fps: 10,
-        qrbox: { width: 300, height: 300 },
+        fps: 60, // Increased FPS for faster scanning
+        qrbox: { width: 350, height: 350 }, // Larger box for faster detection
         aspectRatio: 1.0
       }
 

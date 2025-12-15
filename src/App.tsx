@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
 import { useAuth } from './lib/auth'
@@ -119,25 +119,13 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-
 // Simple PIN Login Component with barcode/keyboard support
 function PinLogin({ onSuccess }: { onSuccess: () => void }) {
   const { login } = useAuth()
+  const { t } = useTranslation()
   const [pin, setPin] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [logo, setLogo] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    // Focus input on mount for keyboard support
-    if (inputRef.current) {
-      inputRef.current.focus()
-    }
-    
-    // Use Supabase Storage URL for logo
-    const logoUrl = getLogoUrl()
-    setLogo(logoUrl)
-    
-    // Logo is now always from Supabase Storage, no need to listen for updates
-  }, [])
-
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (pin.length !== 6) return
     
     setIsLoading(true)
@@ -159,30 +147,63 @@ function PinLogin({ onSuccess }: { onSuccess: () => void }) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [pin, login, onSuccess])
+
+  useEffect(() => {
+    // Focus input on mount for keyboard support
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+    
+    // Use Supabase Storage URL for logo
+    const logoUrl = getLogoUrl()
+    setLogo(logoUrl)
+    
+    // Logo is now always from Supabase Storage, no need to listen for updates
+  }, [])
+
+  // Auto-submit when PIN reaches 6 digits
+  useEffect(() => {
+    if (pin.length === 6 && !isLoading) {
+      const timer = setTimeout(() => {
+        handleSubmit()
+      }, 200) // Small delay to ensure state is settled
+      return () => clearTimeout(timer)
+    }
+  }, [pin.length, isLoading, handleSubmit])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    e.preventDefault() // Prevent default behavior to avoid double entry
     if (e.key === 'Enter') {
-      handleSubmit()
+      e.preventDefault()
+      if (pin.length === 6) {
+        handleSubmit()
+      }
     } else if (e.key === 'Backspace') {
-      setPin(prev => prev.slice(0, -1))
-    } else if (e.key >= '0' && e.key <= '9' && pin.length < 6) {
-      setPin(prev => prev + e.key)
+      // Allow backspace to work naturally with the input
+      // Don't prevent default so it works with the input field
+    } else if (e.key >= '0' && e.key <= '9') {
+      // Allow numbers to work naturally with the input
+      // Don't prevent default so it works with the input field
+    } else if (e.key.length === 1) {
+      // Prevent non-numeric characters
+      e.preventDefault()
     }
   }
 
   const handleBarcodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
+    // Filter to only allow digits
+    const digitsOnly = value.replace(/\D/g, '')
+    
     // If it looks like a barcode (longer than 6 digits), extract PIN
-    if (value.length > 6) {
+    if (digitsOnly.length > 6) {
       // Extract last 6 digits as PIN
-      const extractedPin = value.slice(-6)
+      const extractedPin = digitsOnly.slice(-6)
       setPin(extractedPin)
-      handleSubmit()
-    } else if (value.length <= 6) {
-      setPin(value)
+    } else if (digitsOnly.length <= 6) {
+      setPin(digitsOnly)
     }
+    // Auto-submit is handled by useEffect when pin.length === 6
   }
 
   const numbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
@@ -209,20 +230,25 @@ function PinLogin({ onSuccess }: { onSuccess: () => void }) {
               }}
             />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Sigma Shpërndarje</h1>
-          <p className="text-gray-600">Enter your PIN to continue</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('login.title')}</h1>
+          <p className="text-gray-600">{t('login.subtitle')}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-          {/* Hidden input for barcode scanning */}
+          {/* Hidden input for keyboard typing and barcode scanning */}
           <input
             ref={inputRef}
             type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={pin}
             onChange={handleBarcodeInput}
             onKeyDown={handleKeyPress}
             className="sr-only"
-            placeholder="Scan barcode or type PIN"
+            placeholder={t('login.placeholder')}
+            maxLength={6}
+            disabled={isLoading}
+            autoFocus
           />
           
           <div className="text-center mb-6">
@@ -239,7 +265,7 @@ function PinLogin({ onSuccess }: { onSuccess: () => void }) {
               ))}
             </div>
             <p className="text-sm text-gray-500">
-              Enter your 6-digit PIN or scan barcode
+              {t('login.instruction')}
             </p>
           </div>
 
@@ -259,7 +285,7 @@ function PinLogin({ onSuccess }: { onSuccess: () => void }) {
               disabled={pin.length === 0 || isLoading}
               className="aspect-square bg-white border-2 border-gray-300 rounded-xl text-2xl font-bold hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50"
             >
-              Clear
+              {t('login.clear')}
             </button>
             <button
               onClick={() => setPin(prev => prev.slice(0, -1))}
@@ -276,7 +302,7 @@ function PinLogin({ onSuccess }: { onSuccess: () => void }) {
               disabled={pin.length !== 6 || isLoading}
               className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? t('login.signingIn') : t('login.signin')}
             </button>
           </div>
         </div>
@@ -289,6 +315,7 @@ function PinLogin({ onSuccess }: { onSuccess: () => void }) {
 // Create Label Modal with proper fields
 function CreateLabelModal({ onClose }: { onClose: () => void }) {
   const { user } = useAuth()
+  const { t } = useTranslation()
   const [step, setStep] = useState(1)
   const [inventoryItems, setInventoryItems] = useState<any[]>([])
   const [importMode, setImportMode] = useState(false) // Toggle between manual and import mode
@@ -483,7 +510,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
 
             const contentsNote = [
               recipientInfo ? `To: ${recipientInfo}` : '',
-              address ? `Address: ${address}` : '',
+              address || '',
               `Items: ${importedItems.map(i => `${i.product} x${i.quantity}`).join(', ')}`
             ].filter(Boolean).join('\n')
 
@@ -675,12 +702,13 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
       const qrCodeData = pkg.short_code || pkg.id
       
       await QRCode.toCanvas(canvas, qrCodeData, {
-        width: 300,
-        margin: 2,
+        width: 500, // Increased resolution for better print quality
+        margin: 3, // Slightly more margin for better scanning
         color: {
           dark: '#000000',
           light: '#FFFFFF'
-        }
+        },
+        errorCorrectionLevel: 'M' // Better error correction for durability
       })
 
       const dataUrl = canvas.toDataURL('image/png')
@@ -950,7 +978,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
       <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Create Label</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t('createLabel.title')}</h2>
             <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">×</button>
           </div>
           
@@ -989,7 +1017,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  Manual Entry
+                  {t('createLabel.manualEntry')}
                 </button>
                 <button
                   onClick={() => {
@@ -1009,7 +1037,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  Import from Excel
+                  {t('createLabel.importFromExcel')}
                 </button>
               </div>
             </div>
@@ -1024,8 +1052,8 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">Import from Excel</h3>
-                <p className="text-sm text-gray-600">Upload an Excel file to populate the form</p>
+                <h3 className="text-lg font-medium text-gray-900">{t('createLabel.importFromExcel')}</h3>
+                <p className="text-sm text-gray-600">{t('createLabel.importFromExcel')}</p>
               </div>
 
               <div>
@@ -1034,7 +1062,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
-                    <span className="text-sm font-medium text-gray-700">Choose Excel File</span>
+                    <span className="text-sm font-medium text-gray-700">{t('createLabel.chooseExcelFile')}</span>
                   </div>
                   <input
                     type="file"
@@ -1044,12 +1072,12 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                   />
                 </label>
                 <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                  <p className="text-xs font-semibold text-gray-700 mb-1">Excel Format Required:</p>
+                  <p className="text-xs font-semibold text-gray-700 mb-1">{t('createLabel.excelFormat')}</p>
                   <p className="text-xs text-gray-600">
-                    Columns: <span className="font-mono">Beneficiary</span> | <span className="font-mono">Company</span> | <span className="font-mono">Address</span> | <span className="font-mono">Products</span> | <span className="font-mono">Notes</span>
+                    {t('createLabel.excelColumns')} <span className="font-mono">Beneficiary</span> | <span className="font-mono">Company</span> | <span className="font-mono">Address</span> | <span className="font-mono">Products</span> | <span className="font-mono">Notes</span>
                   </p>
                   <p className="text-xs text-gray-600 mt-1">
-                    Products column: SKUs separated by semicolons (e.g., <span className="font-mono">6; 5; 9</span>)
+                    {t('createLabel.excelProductsNote')} <span className="font-mono">6; 5; 9</span>)
                   </p>
                 </div>
               </div>
@@ -1057,7 +1085,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
               {/* Bulk import progress */}
               {isBulkImporting && (
                 <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-semibold text-blue-800 mb-2">Processing bulk import...</p>
+                  <p className="text-sm font-semibold text-blue-800 mb-2">{t('createLabel.processingBulkImport')}</p>
                   <div className="w-full bg-blue-200 rounded-full h-2.5 mb-2">
                     <div 
                       className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
@@ -1065,7 +1093,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     ></div>
                   </div>
                   <p className="text-xs text-blue-700 text-center">
-                    {bulkImportProgress.current} of {bulkImportProgress.total} rows processed
+                    {bulkImportProgress.current} {t('createLabel.rowsProcessed')} {bulkImportProgress.total}
                   </p>
                 </div>
               )}
@@ -1080,41 +1108,41 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">Recipient Information</h3>
-                <p className="text-sm text-gray-600">Enter recipient details</p>
+                <h3 className="text-lg font-medium text-gray-900">{t('createLabel.recipientInfo')}</h3>
+                <p className="text-sm text-gray-600">{t('createLabel.enterRecipientDetails')}</p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('createLabel.nameRequired')}</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    placeholder="First name"
+                    placeholder={t('createLabel.firstNamePlaceholder')}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Surname *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('createLabel.surnameRequired')}</label>
                   <input
                     type="text"
                     value={formData.surname}
                     onChange={(e) => setFormData({...formData, surname: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    placeholder="Last name"
+                    placeholder={t('createLabel.lastNamePlaceholder')}
                   />
                 </div>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('createLabel.company')}</label>
                 <input
                   type="text"
                   value={formData.company}
                   onChange={(e) => setFormData({...formData, company: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  placeholder="Company name"
+                  placeholder={t('createLabel.companyPlaceholder')}
                 />
               </div>
             </div>
@@ -1129,18 +1157,18 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">Delivery Address</h3>
-                <p className="text-sm text-gray-600">Enter delivery address</p>
+                <h3 className="text-lg font-medium text-gray-900">{t('createLabel.deliveryAddress')}</h3>
+                <p className="text-sm text-gray-600">{t('createLabel.enterDeliveryAddress')}</p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('createLabel.addressRequired')}</label>
                 <textarea
                   value={formData.address}
                   onChange={(e) => setFormData({...formData, address: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   rows={3}
-                  placeholder="Street address, city, postal code"
+                  placeholder={t('createLabel.addressPlaceholder')}
                 />
               </div>
             </div>
@@ -1154,15 +1182,15 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">Products</h3>
-                <p className="text-sm text-gray-600">Select products and quantities</p>
+                <h3 className="text-lg font-medium text-gray-900">{t('createLabel.products')}</h3>
+                <p className="text-sm text-gray-600">{t('createLabel.selectProductsQuantities')}</p>
               </div>
 
               
               {/* Selected Products Summary */}
               {formData.items.length > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Selected Products:</h4>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">{t('createLabel.selectedProducts')}</h4>
                   <div className="space-y-2">
                     {formData.items.map((item) => {
                       const inventoryItem = inventoryItems.find(i => i.id === item.productId)
@@ -1171,7 +1199,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                           <div className="flex-1">
                             <div className="font-medium text-gray-900">{item.product}</div>
                             {inventoryItem && (
-                              <div className="text-xs text-gray-500">SKU: {inventoryItem.sku} • Available: {inventoryItem.stock_on_hand} {inventoryItem.unit}</div>
+                              <div className="text-xs text-gray-500">{t('inventory.sku')}: {inventoryItem.sku} • {t('createLabel.available')} {inventoryItem.stock_on_hand} {inventoryItem.unit}</div>
                             )}
                           </div>
                           <div className="flex items-center space-x-3">
@@ -1193,7 +1221,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                             <button
                               onClick={() => handleProductRemove(item.productId)}
                               className="ml-2 p-1 text-red-600 hover:text-red-700"
-                              title="Remove"
+                              title={t('createLabel.remove')}
                             >
                               ×
                             </button>
@@ -1224,12 +1252,12 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                         }`}
                       >
                         <div className="font-medium text-gray-900">{item.name}</div>
-                        <div className="text-sm text-gray-600">SKU: {item.sku} • Stock: {item.stock_on_hand} {item.unit}</div>
+                        <div className="text-sm text-gray-600">{t('inventory.sku')}: {item.sku} • {t('inventory.stockLabel')} {item.stock_on_hand} {item.unit}</div>
                         {isSelected && (
-                          <div className="mt-2 text-xs text-red-600 font-semibold">Selected: {selectedQty}</div>
+                          <div className="mt-2 text-xs text-red-600 font-semibold">{t('inventory.selected')} {selectedQty}</div>
                         )}
                         {item.stock_on_hand <= item.min_threshold && (
-                          <div className="mt-2 text-xs text-orange-600 font-medium">⚠️ Low Stock</div>
+                          <div className="mt-2 text-xs text-orange-600 font-medium">{t('inventory.lowStock')}</div>
                         )}
                       </button>
                     )
@@ -1238,7 +1266,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
 
               {inventoryItems.filter(item => item.stock_on_hand > 0).length === 0 && (
                 <div className="text-center py-8 text-gray-500">
-                  <p>No products available in inventory</p>
+                  <p>{t('createLabel.noProductsAvailable')}</p>
                 </div>
               )}
             </div>
@@ -1252,36 +1280,36 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">Label Created!</h3>
-                <p className="text-sm text-gray-600">Review details and print label</p>
+                <h3 className="text-lg font-medium text-gray-900">{t('createLabel.labelCreated')}</h3>
+                <p className="text-sm text-gray-600">{t('createLabel.reviewDetailsPrint')}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 {createdPackage && (
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Package ID:</span>
+                    <span className="text-sm text-gray-600">{t('createLabel.packageId')}</span>
                     <span className="text-sm font-mono font-bold">{createdPackage.short_code}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Recipient:</span>
+                  <span className="text-sm text-gray-600">{t('createLabel.recipient')}:</span>
                   <span className="text-sm font-medium">{formData.name} {formData.surname}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Company:</span>
-                  <span className="text-sm font-medium">{formData.company || 'N/A'}</span>
+                  <span className="text-sm text-gray-600">{t('createLabel.companyLabel')}</span>
+                  <span className="text-sm font-medium">{formData.company || t('packages.noNotes')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Address:</span>
+                  <span className="text-sm text-gray-600">{t('createLabel.addressLabel')}</span>
                   <span className="text-sm font-medium">{formData.address}</span>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <span className="text-sm text-gray-600">Products:</span>
+                  <span className="text-sm text-gray-600">{t('createLabel.productsLabel')}</span>
                   {formData.items.length > 0 ? (
                     formData.items.map((item, idx) => (
                       <span key={idx} className="text-sm font-medium">{item.product} x {item.quantity}</span>
                     ))
                   ) : (
-                    <span className="text-sm font-medium">No products</span>
+                    <span className="text-sm font-medium">{t('createLabel.noProducts')}</span>
                   )}
                 </div>
               </div>
@@ -1290,7 +1318,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                 disabled={isPrinting || !createdPackage}
                 className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors disabled:opacity-50"
               >
-                {isPrinting ? 'Preparing Print...' : 'Print Label'}
+                {isPrinting ? t('createLabel.preparingPrint') : t('createLabel.printLabel')}
               </button>
             </div>
           )}
@@ -1301,7 +1329,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                 onClick={() => setStep(step - 1)}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors"
               >
-                Back
+                {t('createLabel.back')}
               </button>
             )}
             
@@ -1310,7 +1338,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                 onClick={handleNext}
                 className="bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors ml-auto"
               >
-                Next
+                {t('createLabel.next')}
               </button>
             )}
 
@@ -1319,7 +1347,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                 onClick={handleCreate}
                 className="bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors ml-auto"
               >
-                Review & Create
+                {t('createLabel.reviewCreate')}
               </button>
             )}
 
@@ -1328,7 +1356,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                 onClick={onClose}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium py-3 px-6 rounded-lg transition-colors"
               >
-                Close
+                {t('common.close')}
               </button>
             )}
           </div>
@@ -1351,28 +1379,30 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
                     target.style.display = 'none'
                   }}
                 />
+                <div className="logo-separator"></div>
               </div>
               
               <div className="tracking-code-section">
-                <div className="tracking-label">TRACKING</div>
+                <div className="tracking-label">{t('createLabel.tracking')}</div>
                 <div className="tracking-code">{createdPackage.short_code}</div>
               </div>
 
               <div className="recipient-section">
                 <div className="recipient-name">{formData.name} {formData.surname}</div>
-                {formData.company && <div className="company-name">{formData.company}</div>}
-                <div className="address-text">{formData.address}</div>
+                {formData.company && (
+                  <div className="company-name">{formData.company}</div>
+                )}
+                {formData.address && <div className="address-text">{formData.address}</div>}
               </div>
             </div>
 
             <div className="label-right-section">
               <img src={barcodeDataUrl} alt="QR Code" className="qr-code" />
-              <div className="qr-label">Scan to Track</div>
             </div>
           </div>
         ) : (
           <div className="shipping-label">
-            <div className="tracking-code">Loading...</div>
+            <div className="tracking-code">{t('createLabel.loading')}</div>
           </div>
         )}
       </div>
@@ -1385,7 +1415,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
           left: -9999px;
           top: -9999px;
           width: 50mm;
-          height: 30mm;
+          min-height: 30mm;
         }
 
         /* Print styles - 50mm x 30mm thermal label (landscape/horizontal) */
@@ -1422,17 +1452,17 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
 
           html, body {
             width: 50mm !important;
-            height: 30mm !important;
+            min-height: 30mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             background: white !important;
           }
 
           /* Main Label Container - Modern Sleek Design */
           .shipping-label {
             width: 50mm !important;
-            height: 30mm !important;
+            min-height: 30mm !important;
             padding: 0 !important;
             box-sizing: border-box !important;
             display: flex !important;
@@ -1442,26 +1472,29 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
             color: #000 !important;
             position: relative !important;
             border: 0.5mm solid #e5e7eb !important;
-            overflow: hidden !important;
+            overflow: visible !important;
           }
 
           /* Left Section - Logo, Tracking, Recipient */
           .label-left-section {
-            flex: 1 !important;
+            flex: 1.5 !important;
             display: flex !important;
             flex-direction: column !important;
-            padding: 1.2mm !important;
-            justify-content: space-between !important;
-            min-width: 0 !important;
+            padding: 1mm 1.5mm 1.5mm 1.5mm !important;
+            justify-content: flex-start !important;
+            gap: 0.5mm !important;
+            min-height: 0 !important;
+            flex-shrink: 0 !important;
           }
 
           /* Logo Section */
           .logo-section {
-            margin-bottom: 1mm !important;
+            margin-bottom: 0.2mm !important;
+            flex-shrink: 0 !important;
           }
 
           .logo {
-            max-height: 6mm !important;
+            max-height: 5mm !important;
             max-width: 100% !important;
             width: auto !important;
             height: auto !important;
@@ -1469,90 +1502,121 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
             object-fit: contain !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
+            margin-bottom: 0.2mm !important;
+          }
+
+          .logo-separator {
+            height: 0.3mm !important;
+            background: #dc2626 !important;
+            width: 100% !important;
+            margin-top: 0.4mm !important;
+          }
+
+          /* Company Section - Before tracking */
+          .company-section {
+            margin-bottom: 0.4mm !important;
+          }
+
+          /* Company Name - Secondary */
+          .company-name {
+            font-weight: 600 !important;
+            font-size: 7pt !important;
+            color: #111827 !important;
+            line-height: 1.2 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.1px !important;
+            font-family: 'Arial', sans-serif !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+            margin-bottom: 0.5mm !important;
           }
 
           /* Tracking Code Section - Smallest */
           .tracking-code-section {
-            margin-bottom: 1mm !important;
+            margin-bottom: 0.2mm !important;
+            flex-shrink: 0 !important;
           }
 
           .tracking-label {
-            font-size: 3.5pt !important;
-            font-weight: 500 !important;
-            color: #9ca3af !important;
+            font-size: 1.8pt !important;
+            font-weight: 600 !important;
+            color: #111827 !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-            margin-bottom: 0.2mm !important;
+            letter-spacing: 0.2px !important;
+            margin-bottom: 0.15mm !important;
             font-family: 'Arial', sans-serif !important;
           }
 
           .tracking-code {
-            font-size: 5.5pt !important;
+            font-size: 2.5pt !important;
             font-weight: 600 !important;
-            letter-spacing: 1px !important;
-            color: #6b7280 !important;
-            line-height: 1.2 !important;
+            letter-spacing: 0.5px !important;
+            color: #111827 !important;
+            line-height: 1.0 !important;
             text-transform: uppercase !important;
             font-family: 'Courier New', 'Monaco', monospace !important;
-            padding: 0.4mm 0.6mm !important;
-            border-radius: 1mm !important;
-            border: 0.3mm solid #e5e7eb !important;
+            padding: 0.2mm 0.3mm !important;
+            border-radius: 0.6mm !important;
+            border: 0.2mm solid #e5e7eb !important;
             background: #f9fafb !important;
             display: inline-block !important;
           }
 
-          /* Recipient Section */
+          /* Recipient Section - Primary content block */
           .recipient-section {
-            flex: 1 !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: flex-start !important;
+            gap: 0.5mm !important;
+            margin-top: 0.3mm !important;
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
           }
 
-          /* Recipient Name - BIGGEST */
+          /* Recipient Name - PRIMARY FOCAL POINT - Largest element on label */
           .recipient-name {
             font-weight: 900 !important;
-            font-size: 11pt !important;
+            font-size: 14pt !important;
+            margin: 0 !important;
             margin-bottom: 0.5mm !important;
+            padding: 0 !important;
             color: #111827 !important;
-            line-height: 1.1 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-          }
-
-          /* Company Name - Medium/Smaller */
-          .company-name {
-            font-weight: 600 !important;
-            font-size: 7pt !important;
-            margin-bottom: 0.4mm !important;
-            color: #4b5563 !important;
             line-height: 1.2 !important;
-            font-style: normal !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.3px !important;
+            font-family: 'Arial Black', 'Arial', sans-serif !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+            flex-shrink: 0 !important;
           }
 
+          /* Address - Tertiary plain text */
           .address-text {
             font-size: 5pt !important;
             color: #374151 !important;
             line-height: 1.3 !important;
             word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
             font-weight: 400 !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
+            font-family: 'Arial', sans-serif !important;
           }
 
           /* Right Section - Large QR Code */
           .label-right-section {
-            width: 20mm !important;
-            height: 100% !important;
+            width: 18mm !important;
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
             background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%) !important;
             border-left: 0.5mm dashed #d1d5db !important;
-            padding: 1mm !important;
+            padding: 1.5mm !important;
             box-sizing: border-box !important;
+            flex-shrink: 0 !important;
+            align-self: stretch !important;
           }
 
           /* QR Code - Large and Prominent */
@@ -1561,6 +1625,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
             height: 18mm !important;
             display: block !important;
             flex-shrink: 0 !important;
+            object-fit: contain !important;
             border: 0.5mm solid #111827 !important;
             padding: 1mm !important;
             background: white !important;
@@ -1570,19 +1635,10 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
             image-rendering: crisp-edges !important;
           }
 
-          .qr-label {
-            font-size: 4.5pt !important;
-            font-weight: 600 !important;
-            color: #6b7280 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.8px !important;
-            margin-top: 0.8mm !important;
-            font-family: 'Arial', sans-serif !important;
-          }
 
           /* Items List - Compact and readable */
           .items-list {
-            font-size: 5.5pt !important;
+            font-size: 3.5pt !important;
             color: #111827 !important;
             line-height: 1.3 !important;
             font-family: 'Arial', 'Helvetica', sans-serif !important;
@@ -1714,6 +1770,7 @@ function ScannerModal({ onClose }: { onClose: () => void }) {
 // Admin Modal Component - Enhanced with Packages, Products, and Audit Log
 function AdminModal({ onClose }: { onClose: () => void }) {
   const { user: currentUser } = useAuth()
+  const { t } = useTranslation()
   
   // Prevent non-admin access
   if (currentUser?.role !== 'admin') {
@@ -1727,13 +1784,13 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
-              <p className="text-gray-600 mb-4">Only administrators can access this section.</p>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('admin.accessDenied')}</h2>
+              <p className="text-gray-600 mb-4">{t('admin.onlyAdminAccess')}</p>
               <button
                 onClick={onClose}
                 className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-6 rounded-lg transition-colors"
               >
-                Close
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -2027,7 +2084,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                   target.style.display = 'none'
                 }} 
               />
-              <h2 className="text-lg font-semibold text-gray-900">Admin</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t('admin.title')}</h2>
             </div>
             <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">×</button>
           </div>
@@ -2039,7 +2096,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                 activeTab === 'users' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'
               }`}
             >
-              Users
+              {t('admin.users')}
             </button>
             <button
               onClick={() => setActiveTab('packages')}
@@ -2047,7 +2104,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                 activeTab === 'packages' ? 'bg-red-600 text-white shadow-lg scale-105' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Packages
+              {t('admin.packages')}
             </button>
             <button
               onClick={() => setActiveTab('products')}
@@ -2055,7 +2112,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                 activeTab === 'products' ? 'bg-red-600 text-white shadow-lg scale-105' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Products
+              {t('admin.products')}
             </button>
             <button
               onClick={() => setActiveTab('audit')}
@@ -2063,7 +2120,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                 activeTab === 'audit' ? 'bg-red-600 text-white shadow-lg scale-105' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Audit Log
+              {t('admin.auditLog')}
             </button>
           </div>
         </div>
@@ -2072,47 +2129,47 @@ function AdminModal({ onClose }: { onClose: () => void }) {
           {activeTab === 'users' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-md font-medium text-gray-900">User Management</h3>
+                <h3 className="text-md font-medium text-gray-900">{t('admin.userManagement')}</h3>
                 <button
                   onClick={() => setShowAddUser(true)}
                   className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
                 >
-                  + Add User
+                  {t('admin.addUser')}
                 </button>
               </div>
 
               {showAddUser && (
                 <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('scanner.name')}</label>
                     <input
                       type="text"
                       value={newUser.name}
                       onChange={(e) => setNewUser({...newUser, name: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                      placeholder="Full name"
+                      placeholder={t('admin.fullName')}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PIN</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.pinLabel')}</label>
                     <input
                       type="text"
                       value={newUser.pin}
                       onChange={(e) => setNewUser({...newUser, pin: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                      placeholder="6-digit PIN"
+                      placeholder={t('admin.pinPlaceholder')}
                       maxLength={6}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.role')}</label>
                     <select
                       value={newUser.role}
                       onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     >
-                      <option value="standard">Standard</option>
-                      <option value="admin">Admin</option>
+                      <option value="standard">{t('admin.standard')}</option>
+                      <option value="admin">{t('admin.adminRole')}</option>
                     </select>
                   </div>
                   <div className="flex space-x-2">
@@ -2120,7 +2177,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                       onClick={handleAddUser}
                       className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
                     >
-                      Add User
+                      {t('admin.addUserButton')}
                     </button>
                     <button
                       onClick={() => {
@@ -2129,7 +2186,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                       }}
                       className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium py-2 px-4 rounded-lg transition-colors"
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </div>
@@ -2157,8 +2214,8 @@ function AdminModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-4 fade-in-up">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Package Management</h3>
-                  <p className="text-sm text-gray-600">View and modify package details, status, and information</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{t('admin.packageManagement')}</h3>
+                  <p className="text-sm text-gray-600">{t('admin.viewModifyPackage')}</p>
                 </div>
               </div>
 
@@ -2168,7 +2225,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                   type="text"
                   value={packageSearchTerm}
                   onChange={(e) => setPackageSearchTerm(e.target.value)}
-                  placeholder="Search packages by ID, contents, or creator..."
+                  placeholder={t('admin.searchPackages')}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
               </div>
@@ -2177,7 +2234,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
               {editingPackage && (
                 <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-6 border border-red-100 shadow-lg">
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-gray-900">Edit Package: {editingPackage.short_code}</h4>
+                    <h4 className="text-lg font-semibold text-gray-900">{t('admin.editPackage')} {editingPackage.short_code}</h4>
                     <button
                       onClick={() => {
                         setEditingPackage(null)
@@ -2191,43 +2248,43 @@ function AdminModal({ onClose }: { onClose: () => void }) {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.statusLabel')}</label>
                       <select
                         value={packageFormData.status}
                         onChange={(e) => setPackageFormData({ ...packageFormData, status: e.target.value })}
                         className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                       >
-                        <option value="created">Created</option>
-                        <option value="queued_for_print">Queued for Print</option>
-                        <option value="printed">Printed</option>
-                        <option value="handed_over">Handed Over</option>
-                        <option value="in_transit">In Transit</option>
-                        <option value="at_branch">At Branch</option>
-                        <option value="delivered">Delivered</option>
-                        <option value="returned">Returned</option>
-                        <option value="canceled">Canceled</option>
+                        <option value="created">{t('scanner.statuses.created')}</option>
+                        <option value="queued_for_print">{t('scanner.statuses.queued_for_print')}</option>
+                        <option value="printed">{t('scanner.statuses.printed')}</option>
+                        <option value="handed_over">{t('scanner.statuses.handed_over')}</option>
+                        <option value="in_transit">{t('scanner.statuses.in_transit')}</option>
+                        <option value="at_branch">{t('scanner.statuses.at_branch')}</option>
+                        <option value="delivered">{t('scanner.statuses.delivered')}</option>
+                        <option value="returned">{t('scanner.statuses.returned')}</option>
+                        <option value="canceled">{t('scanner.statuses.canceled')}</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Current Location</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.currentLocation')}</label>
                       <input
                         type="text"
                         value={packageFormData.current_location}
                         onChange={(e) => setPackageFormData({ ...packageFormData, current_location: e.target.value })}
                         className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                        placeholder="e.g., Main Office, Warehouse"
+                        placeholder={t('admin.currentLocationPlaceholder')}
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Destination Branch</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.destinationBranch')}</label>
                       <select
                         value={packageFormData.destination_branch_id}
                         onChange={(e) => setPackageFormData({ ...packageFormData, destination_branch_id: e.target.value })}
                         className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                       >
-                        <option value="">Select branch</option>
+                        <option value="">{t('admin.selectBranch')}</option>
                         {branches.map((branch) => (
                           <option key={branch.id} value={branch.id}>
                             {branch.name} - {branch.code}
@@ -2237,13 +2294,13 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Contents / Products</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.contentsProducts')}</label>
                       <textarea
                         value={packageFormData.contents_note}
                         onChange={(e) => setPackageFormData({ ...packageFormData, contents_note: e.target.value })}
                         className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 resize-none"
                         rows={4}
-                        placeholder="List products and quantities (e.g., Electronics x2, Documents x1)"
+                        placeholder={t('admin.contentsPlaceholder')}
                       />
                     </div>
 
@@ -2252,7 +2309,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                         onClick={handleSavePackage}
                         className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-md hover:shadow-lg"
                       >
-                        Save Changes
+                        {t('admin.saveChanges')}
                       </button>
                       <button
                         onClick={() => {
@@ -2261,7 +2318,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                         }}
                         className="px-6 py-3 bg-white hover:bg-gray-50 text-gray-700 font-semibold border border-gray-300 rounded-lg"
                       >
-                        Cancel
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -2478,7 +2535,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
                   {auditLogs.length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-xl">
-                      <p className="text-gray-500">No audit logs found</p>
+                      <p className="text-gray-500">{t('admin.noAuditLogs')}</p>
                     </div>
                   ) : (
                     auditLogs.map((log) => (
@@ -2495,22 +2552,22 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                               <div>
-                                <span className="text-gray-500 font-medium">User:</span>
-                                <p className="text-gray-900 mt-0.5 font-semibold">{log.user?.name || 'Unknown User'}</p>
+                                <span className="text-gray-500 font-medium">{t('admin.user')}</span>
+                                <p className="text-gray-900 mt-0.5 font-semibold">{log.user?.name || t('admin.unknownUser')}</p>
                               </div>
                               <div>
-                                <span className="text-gray-500 font-medium">Entity ID:</span>
+                                <span className="text-gray-500 font-medium">{t('admin.entityId')}</span>
                                 <p className="text-gray-900 mt-0.5 font-mono text-xs">{log.entity_id}</p>
                               </div>
                               <div>
-                                <span className="text-gray-500 font-medium">Timestamp:</span>
+                                <span className="text-gray-500 font-medium">{t('admin.timestamp')}</span>
                                 <p className="text-gray-900 mt-0.5">
                                   {new Date(log.created_at).toLocaleString()}
                                 </p>
                               </div>
                               {log.ip && (
                                 <div>
-                                  <span className="text-gray-500 font-medium">IP Address:</span>
+                                  <span className="text-gray-500 font-medium">{t('admin.ipAddress')}</span>
                                   <p className="text-gray-900 mt-0.5 font-mono text-xs">{log.ip}</p>
                                 </div>
                               )}
@@ -2518,12 +2575,12 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                             {(log.before_json || log.after_json) && (
                               <details className="mt-3">
                                 <summary className="text-sm text-gray-600 cursor-pointer hover:text-gray-900">
-                                  View Changes
+                                  {t('admin.viewChanges')}
                                 </summary>
                                 <div className="mt-2 p-3 bg-gray-50 rounded-lg text-xs font-mono">
                                   {log.before_json && (
                                     <div className="mb-2">
-                                      <span className="font-semibold text-red-600">Before:</span>
+                                      <span className="font-semibold text-red-600">{t('admin.before')}</span>
                                       <pre className="mt-1 text-gray-700 whitespace-pre-wrap">
                                         {JSON.stringify(log.before_json, null, 2)}
                                       </pre>
@@ -2531,7 +2588,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                                   )}
                                   {log.after_json && (
                                     <div>
-                                      <span className="font-semibold text-green-600">After:</span>
+                                      <span className="font-semibold text-green-600">{t('admin.after')}</span>
                                       <pre className="mt-1 text-gray-700 whitespace-pre-wrap">
                                         {JSON.stringify(log.after_json, null, 2)}
                                       </pre>
@@ -2555,10 +2612,10 @@ function AdminModal({ onClose }: { onClose: () => void }) {
       {/* Delete Confirmation Dialog */}
       <ConfirmationDialog
         isOpen={showDeleteConfirm}
-        title="Delete Package"
-        message={`Are you sure you want to delete package ${packageToDelete?.short_code}? This action cannot be undone and will also delete all related history and scans.`}
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('admin.deletePackage')}
+        message={t('admin.deleteConfirmMessage', { code: packageToDelete?.short_code })}
+        confirmText={t('admin.deleteButton')}
+        cancelText={t('common.cancel')}
         type="danger"
         onConfirm={confirmDeletePackage}
         onCancel={() => {
@@ -2572,6 +2629,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
 
 // Inventory Modal Component
 function InventoryModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   const [products, setProducts] = useState<any[]>([])
   const [showAddProduct, setShowAddProduct] = useState(false)
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', stock: 0, min_threshold: 10 })
@@ -2646,7 +2704,7 @@ function InventoryModal({ onClose }: { onClose: () => void }) {
                   target.style.display = 'none'
                 }} 
               />
-              <h2 className="text-lg font-semibold text-gray-900">Inventory Management</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t('inventory.inventoryManagement')}</h2>
             </div>
             <div className="flex items-center space-x-2">
               <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">×</button>
@@ -2658,15 +2716,15 @@ function InventoryModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-3">
             {products.length === 0 ? (
               <div className="text-center py-12 bg-gray-50 rounded-xl">
-                <p className="text-gray-500">No products found</p>
+                <p className="text-gray-500">{t('inventory.noProductsFound')}</p>
               </div>
             ) : (
               products.map((product) => (
                 <div key={product.id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
                   <div className="flex-1">
                     <div className="font-medium text-gray-900">{product.name}</div>
-                    <div className="text-sm text-gray-600 mt-1">SKU: {product.sku}</div>
-                    <div className="text-xs text-gray-500 mt-1">Unit: {product.unit} • Min Threshold: {product.min_threshold}</div>
+                    <div className="text-sm text-gray-600 mt-1">{t('inventory.sku')}: {product.sku}</div>
+                    <div className="text-xs text-gray-500 mt-1">{t('inventory.unit')}: {product.unit} • {t('inventory.minThreshold')}: {product.min_threshold}</div>
                   </div>
                   <div className="text-right ml-6">
                     <div className={`text-2xl font-bold ${
@@ -2689,6 +2747,7 @@ function InventoryModal({ onClose }: { onClose: () => void }) {
 
 // Packages Modal Component
 function PackagesModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   const [packages, setPackages] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedPackage, setSelectedPackage] = useState<any>(null)
@@ -2829,12 +2888,13 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     try {
       const canvas = document.createElement('canvas')
       await QRCode.toCanvas(canvas, shortCode, {
-        width: 300,
-        margin: 2,
+        width: 500, // Increased resolution for better print quality
+        margin: 3, // Slightly more margin for better scanning
         color: {
           dark: '#000000',
           light: '#FFFFFF'
-        }
+        },
+        errorCorrectionLevel: 'M' // Better error correction for durability
       })
       return canvas.toDataURL('image/png')
     } catch (error) {
@@ -2870,10 +2930,11 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           <div class="label-left-section">
             <div class="logo-section">
               <img src="${logoSrc}" alt="Sigma Logo" class="logo" onerror="this.style.display='none'" />
+              <div class="logo-separator"></div>
             </div>
             
             <div class="tracking-code-section">
-              <div class="tracking-label">TRACKING</div>
+              <div class="tracking-label">NDJETIMI</div>
               <div class="tracking-code">${pkg.short_code}</div>
             </div>
 
@@ -2886,7 +2947,6 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
 
           <div class="label-right-section">
             <img src="${qrCodeUrl}" alt="QR Code" class="qr-code" />
-            <div class="qr-label">Scan to Track</div>
           </div>
         </div>
       `
@@ -2987,7 +3047,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                   target.style.display = 'none'
                 }} 
               />
-              <h2 className="text-lg font-semibold text-gray-900">Packages</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t('packages.title')}</h2>
             </div>
             <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">×</button>
           </div>
@@ -2999,7 +3059,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent pr-10"
-                placeholder="Search packages by ID, contents, notes, status, location..."
+                placeholder={t('packages.searchPlaceholder')}
               />
               {isLoading && (
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -3022,42 +3082,42 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                 onClick={() => setSelectedPackage(null)}
                 className="text-red-600 hover:text-red-700 font-medium mb-4"
               >
-                ← Back to List
+                ← {t('common.back')} {t('common.to')} {t('common.list')}
               </button>
               
               <div className="bg-gray-50 rounded-lg p-6 space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Package Details</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('packages.packageDetails')}</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <span className="text-sm text-gray-600">Package ID:</span>
+                      <span className="text-sm text-gray-600">{t('createLabel.packageCode')}:</span>
                       <p className="font-mono font-medium">{selectedPackage.short_code}</p>
                     </div>
                     <div>
-                      <span className="text-sm text-gray-600">Status:</span>
+                      <span className="text-sm text-gray-600">{t('packages.status')}:</span>
                       <p className={`inline-block px-3 py-1 rounded-full text-sm ${getStatusColor(selectedPackage.status)}`}>
-                        {selectedPackage.status.replace('_', ' ')}
+                        {t(`scanner.statuses.${selectedPackage.status}`)}
                       </p>
                     </div>
                     <div>
-                      <span className="text-sm text-gray-600">Current Location:</span>
+                      <span className="text-sm text-gray-600">{t('scanner.currentLocation')}:</span>
                       <p className="font-medium">{selectedPackage.current_location}</p>
                     </div>
                     <div>
-                      <span className="text-sm text-gray-600">Created:</span>
+                      <span className="text-sm text-gray-600">{t('scanner.createdAt')}:</span>
                       <p className="font-medium">{new Date(selectedPackage.created_at).toLocaleDateString()}</p>
                     </div>
                   </div>
                 </div>
                 
                 <div>
-                  <span className="text-sm text-gray-600">Contents:</span>
+                  <span className="text-sm text-gray-600">{t('scanner.contentsNote')}:</span>
                   <p className="font-medium whitespace-pre-line">{selectedPackage.contents_note}</p>
                 </div>
                 
                 {selectedPackage.notes && (
                   <div>
-                    <span className="text-sm text-gray-600">Notes:</span>
+                    <span className="text-sm text-gray-600">{t('packages.notes')}:</span>
                     <p className="font-medium whitespace-pre-line text-gray-900 bg-yellow-50 p-3 rounded-lg border border-yellow-200 mt-1">
                       {selectedPackage.notes}
                     </p>
@@ -3069,8 +3129,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-3">
               {filteredPackages.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  <p className="text-lg">No packages found</p>
-                  <p className="text-sm mt-2">Create a label to get started</p>
+                  <p className="text-lg">{t('packages.noPackages')}</p>
+                  <p className="text-sm mt-2">{t('home.createLabelDesc')}</p>
                 </div>
               ) : (
                 filteredPackages.map((pkg) => (
@@ -3101,12 +3161,12 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                         className={`flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm ${
                           isPrinting && printingPackageId === pkg.id ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
-                        title="Print Label"
+                        title={t('packages.printLabel')}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                         </svg>
-                        <span>Print Label</span>
+                        <span>{t('packages.printLabel')}</span>
                       </button>
                     </div>
                   </div>
@@ -3162,17 +3222,17 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
 
           html, body {
             width: 50mm !important;
-            height: 30mm !important;
+            min-height: 30mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             background: white !important;
           }
 
           /* Main Label Container - Modern Sleek Design */
           .shipping-label {
             width: 50mm !important;
-            height: 30mm !important;
+            min-height: 30mm !important;
             padding: 0 !important;
             box-sizing: border-box !important;
             display: flex !important;
@@ -3182,26 +3242,29 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             color: #000 !important;
             position: relative !important;
             border: 0.5mm solid #e5e7eb !important;
-            overflow: hidden !important;
+            overflow: visible !important;
           }
 
           /* Left Section - Logo, Tracking, Recipient */
           .label-left-section {
-            flex: 1 !important;
+            flex: 1.5 !important;
             display: flex !important;
             flex-direction: column !important;
-            padding: 1.2mm !important;
-            justify-content: space-between !important;
-            min-width: 0 !important;
+            padding: 1mm 1.5mm 1.5mm 1.5mm !important;
+            justify-content: flex-start !important;
+            gap: 0.5mm !important;
+            min-height: 0 !important;
+            flex-shrink: 0 !important;
           }
 
           /* Logo Section */
           .logo-section {
-            margin-bottom: 1mm !important;
+            margin-bottom: 0.2mm !important;
+            flex-shrink: 0 !important;
           }
 
           .logo {
-            max-height: 6mm !important;
+            max-height: 5mm !important;
             max-width: 100% !important;
             width: auto !important;
             height: auto !important;
@@ -3209,6 +3272,34 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             object-fit: contain !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
+            margin-bottom: 0.2mm !important;
+          }
+
+          .logo-separator {
+            height: 0.3mm !important;
+            background: #dc2626 !important;
+            width: 100% !important;
+            margin-top: 0.4mm !important;
+          }
+
+          /* Company Section - Before tracking */
+          .company-section {
+            margin-bottom: 0.4mm !important;
+          }
+
+          /* Company Name - Secondary */
+          .company-name {
+            font-weight: 600 !important;
+            font-size: 7pt !important;
+            color: #111827 !important;
+            line-height: 1.2 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.1px !important;
+            font-family: 'Arial', sans-serif !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+            margin-bottom: 0.5mm !important;
           }
 
           /* Tracking Code Section */
@@ -3217,80 +3308,84 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           }
 
           .tracking-label {
-            font-size: 3.5pt !important;
-            font-weight: 500 !important;
-            color: #9ca3af !important;
+            font-size: 1.8pt !important;
+            font-weight: 600 !important;
+            color: #111827 !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-            margin-bottom: 0.2mm !important;
+            letter-spacing: 0.2px !important;
+            margin-bottom: 0.15mm !important;
             font-family: 'Arial', sans-serif !important;
           }
 
           .tracking-code {
-            font-size: 5.5pt !important;
+            font-size: 2.5pt !important;
             font-weight: 600 !important;
-            letter-spacing: 1px !important;
-            color: #6b7280 !important;
-            line-height: 1.2 !important;
+            letter-spacing: 0.5px !important;
+            color: #111827 !important;
+            line-height: 1.0 !important;
             text-transform: uppercase !important;
             font-family: 'Courier New', 'Monaco', monospace !important;
-            padding: 0.4mm 0.6mm !important;
-            border-radius: 1mm !important;
-            border: 0.3mm solid #e5e7eb !important;
+            padding: 0.2mm 0.3mm !important;
+            border-radius: 0.6mm !important;
+            border: 0.2mm solid #e5e7eb !important;
             background: #f9fafb !important;
             display: inline-block !important;
           }
 
-          /* Recipient Section */
+          /* Recipient Section - Primary content block */
           .recipient-section {
-            flex: 1 !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: flex-start !important;
+            gap: 0.5mm !important;
+            margin-top: 0.3mm !important;
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
           }
 
+          /* Recipient Name - PRIMARY FOCAL POINT - Largest element on label */
           .recipient-name {
             font-weight: 900 !important;
-            font-size: 11pt !important;
+            font-size: 14pt !important;
+            margin: 0 !important;
             margin-bottom: 0.5mm !important;
+            padding: 0 !important;
             color: #111827 !important;
-            line-height: 1.1 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
-          }
-
-          .company-name {
-            font-weight: 600 !important;
-            font-size: 7pt !important;
-            margin-bottom: 0.4mm !important;
-            color: #4b5563 !important;
             line-height: 1.2 !important;
-            font-style: normal !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.3px !important;
+            font-family: 'Arial Black', 'Arial', sans-serif !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+            flex-shrink: 0 !important;
           }
 
+          /* Address - Tertiary plain text */
           .address-text {
             font-size: 5pt !important;
             color: #374151 !important;
             line-height: 1.3 !important;
             word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
             font-weight: 400 !important;
-            font-family: 'Arial', 'Helvetica', sans-serif !important;
+            font-family: 'Arial', sans-serif !important;
           }
 
           /* Right Section - Large QR Code */
           .label-right-section {
-            width: 20mm !important;
-            height: 100% !important;
+            width: 18mm !important;
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
             background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%) !important;
             border-left: 0.5mm dashed #d1d5db !important;
-            padding: 1mm !important;
+            padding: 1.5mm !important;
             box-sizing: border-box !important;
+            flex-shrink: 0 !important;
+            align-self: stretch !important;
           }
 
           /* QR Code - Large and Prominent */
@@ -3299,6 +3394,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             height: 18mm !important;
             display: block !important;
             flex-shrink: 0 !important;
+            object-fit: contain !important;
             border: 0.5mm solid #111827 !important;
             padding: 1mm !important;
             background: white !important;
@@ -3308,15 +3404,6 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             image-rendering: crisp-edges !important;
           }
 
-          .qr-label {
-            font-size: 4.5pt !important;
-            font-weight: 600 !important;
-            color: #6b7280 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.8px !important;
-            margin-top: 0.8mm !important;
-            font-family: 'Arial', sans-serif !important;
-          }
 
           /* Items List - Compact and readable */
           .items-list {
@@ -3356,8 +3443,8 @@ function HomeView({ onViewChange }: { onViewChange: (view: string) => void }) {
     },
     {
       id: 'transfer',
-      title: 'Transfer',
-      description: 'Transfer package to new location',
+      title: t('home.transfer'),
+      description: t('home.transferDesc'),
       color: 'bg-red-500',
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3400,8 +3487,8 @@ function HomeView({ onViewChange }: { onViewChange: (view: string) => void }) {
     },
     {
       id: 'admin',
-      title: 'Admin',
-      description: 'Manage users, packages, products, and audit logs',
+      title: t('home.admin'),
+      description: t('home.adminDesc'),
       color: 'bg-red-500',
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
