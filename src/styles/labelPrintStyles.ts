@@ -52,9 +52,28 @@ export const labelPrintStyles = `
     }
 
     @page {
-      size: 58mm 40mm;
-      margin: 0 !important;
-      padding: 0 !important;
+      size: 58mm 40mm !important;
+      margin: 0mm !important;
+      padding: 0mm !important;
+      width: 58mm !important;
+      height: 40mm !important;
+    }
+    
+    /* Force exact dimensions - override any browser defaults */
+    @page :first {
+      size: 58mm 40mm !important;
+      margin: 0mm !important;
+    }
+    
+    /* Additional page rules to ensure dimensions */
+    @page :left {
+      size: 58mm 40mm !important;
+      margin: 0mm !important;
+    }
+    
+    @page :right {
+      size: 58mm 40mm !important;
+      margin: 0mm !important;
     }
 
     html, body {

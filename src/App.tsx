@@ -677,6 +677,40 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
     console.log('Label HTML:', labelElement.innerHTML.substring(0, 200))
     console.log('Label container computed style:', window.getComputedStyle(labelContainer))
 
+    // Inject print settings to force 58mm x 40mm
+    const injectPrintSettings = () => {
+      // Remove any existing print settings
+      const existing = document.getElementById('auto-print-settings')
+      if (existing) existing.remove()
+      
+      // Create style element with forced print dimensions
+      const printStyle = document.createElement('style')
+      printStyle.id = 'auto-print-settings'
+      printStyle.textContent = `
+        @page {
+          size: 58mm 40mm !important;
+          margin: 0mm !important;
+          padding: 0mm !important;
+        }
+        @media print {
+          @page {
+            size: 58mm 40mm !important;
+            margin: 0mm !important;
+            padding: 0mm !important;
+          }
+          html, body {
+            width: 58mm !important;
+            height: 40mm !important;
+            margin: 0mm !important;
+            padding: 0mm !important;
+          }
+        }
+      `
+      document.head.appendChild(printStyle)
+    }
+
+    injectPrintSettings()
+
     // Ensure all content is rendered and visible
     setTimeout(() => {
       try {
@@ -690,10 +724,13 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
           void printRef.current.offsetHeight
         }
 
-        console.log('Calling window.print()')
+        console.log('Calling window.print() with 58mm x 40mm settings')
         window.print()
         
         setTimeout(() => {
+          // Clean up print settings
+          const styleEl = document.getElementById('auto-print-settings')
+          if (styleEl) styleEl.remove()
           setIsPrinting(false)
           toast.success('Label sent to printer')
         }, 1000)
@@ -3310,12 +3347,49 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       return
     }
 
+    // Inject print settings to force 58mm x 40mm
+    const injectPrintSettings = () => {
+      // Remove any existing print settings
+      const existing = document.getElementById('auto-print-settings-packages')
+      if (existing) existing.remove()
+      
+      // Create style element with forced print dimensions
+      const printStyle = document.createElement('style')
+      printStyle.id = 'auto-print-settings-packages'
+      printStyle.textContent = `
+        @page {
+          size: 58mm 40mm !important;
+          margin: 0mm !important;
+          padding: 0mm !important;
+        }
+        @media print {
+          @page {
+            size: 58mm 40mm !important;
+            margin: 0mm !important;
+            padding: 0mm !important;
+          }
+          html, body {
+            width: 58mm !important;
+            height: 40mm !important;
+            margin: 0mm !important;
+            padding: 0mm !important;
+          }
+        }
+      `
+      document.head.appendChild(printStyle)
+    }
+
+    injectPrintSettings()
+
     setTimeout(() => {
       try {
-        console.log('Calling window.print()')
+        console.log('Calling window.print() with 58mm x 40mm settings')
         window.print()
         
         setTimeout(() => {
+          // Clean up print settings
+          const styleEl = document.getElementById('auto-print-settings-packages')
+          if (styleEl) styleEl.remove()
           setIsPrinting(false)
           setPrintingPackageId(null)
           toast.success('Label sent to printer')
