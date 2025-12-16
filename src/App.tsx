@@ -1927,7 +1927,6 @@ function AdminModal({ onClose }: { onClose: () => void }) {
           created_by_user:users!packages_created_by_fkey(name)
         `)
         .order('created_at', { ascending: false })
-        .limit(100)
       
       if (error) throw error
       
@@ -3049,6 +3048,9 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [showPrintAllDialog, setShowPrintAllDialog] = useState(false)
+  const [selectedPackagesForPrint, setSelectedPackagesForPrint] = useState<Set<string>>(new Set())
+  const [selectedColumn, setSelectedColumn] = useState<number>(2) // Default to middle column (column 2)
+  const [printSearchTerm, setPrintSearchTerm] = useState('')
   const [isPrintingAll, setIsPrintingAll] = useState(false)
   const [selectedPackage, setSelectedPackage] = useState<any>(null)
   const [logo, setLogo] = useState<string | null>(null)
@@ -3448,8 +3450,10 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   }
 
   const printAllThermal = async () => {
-    if (packages.length === 0) {
-      toast.error('No packages to print')
+    const packagesToPrint = packages.filter(pkg => selectedPackagesForPrint.has(pkg.id))
+    
+    if (packagesToPrint.length === 0) {
+      toast.error('Ju lutemi zgjidhni të paktën një paketë')
       return
     }
 
@@ -3458,28 +3462,30 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
 
     try {
       // Print each package one by one
-      for (let i = 0; i < packages.length; i++) {
-        const pkg = packages[i]
+      for (let i = 0; i < packagesToPrint.length; i++) {
+        const pkg = packagesToPrint[i]
         await printPackage(pkg)
         
         // Wait a bit between prints to avoid overwhelming the printer
-        if (i < packages.length - 1) {
+        if (i < packagesToPrint.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 1500))
         }
       }
       
-      toast.success(`Successfully printed ${packages.length} labels`)
+      toast.success(`U printuan me sukses ${packagesToPrint.length} etiketa`)
     } catch (error) {
       console.error('Print all error:', error)
-      toast.error('Failed to print all labels')
+      toast.error('Dështoi printimi i etiketave')
     } finally {
       setIsPrintingAll(false)
     }
   }
 
   const printAllA4 = async () => {
-    if (packages.length === 0) {
-      toast.error('No packages to print')
+    const packagesToPrint = packages.filter(pkg => selectedPackagesForPrint.has(pkg.id))
+    
+    if (packagesToPrint.length === 0) {
+      toast.error('Ju lutemi zgjidhni të paktën një paketë')
       return
     }
 
@@ -3499,53 +3505,72 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
 
       // A4 dimensions: 210mm x 297mm
       // Label dimensions: 70mm x 30mm
-      // Margins: 10mm all around
-      // Usable space: 190mm x 277mm
       // Layout: 3 columns (horizontal) x 8 rows (vertical) = 24 labels per page
-      // 3 columns = 3 labels horizontally across
-      // 8 rows = 8 labels vertically down
+      // Place selected packages in the selected column, starting from row 1, going down vertically
 
       const labelsPerRow = 3  // 3 columns = 3 labels horizontally
       const labelsPerColumn = 8  // 8 rows = 8 labels vertically
       const labelsPerPage = labelsPerRow * labelsPerColumn
-      const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
-
-      let html = ''
       
-      for (let page = 0; page < totalPages; page++) {
-        const pageStart = page * labelsPerPage
-        const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
-        const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
-
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm; padding-left: 0; padding-right: 0;">'
+      // Calculate starting position: always start from row 1 in the selected column
+      // Column 1 = position 0, Column 2 = position 1, Column 3 = position 2
+      const startPosition = selectedColumn - 1  // Position in first row (0, 1, or 2)
+      
+      let html = ''
+      html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; padding-left: 0; padding-right: 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm;">'
+      
+      // Place selected packages in the selected column, going down rows
+      for (let i = 0; i < packagesWithQR.length; i++) {
+        const { pkg, qrCode } = packagesWithQR[i]
+        const parsed = parsePackageContents(pkg.contents_note || '')
         
-        for (let i = 0; i < labelsPerPage; i++) {
-          if (i < pagePackages.length) {
-            const { pkg, qrCode } = pagePackages[i]
-            const parsed = parsePackageContents(pkg.contents_note || '')
-            
-            // Generate tracking URL for QR code
-            const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
-            
-            html += `
-              <div class="a4-label" style="width: 70mm; min-height: 30mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm; min-height: auto;">
-                  <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
-                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 12mm; height: 12mm; flex-shrink: 0;"></div>'}
-                </div>
-                <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
-                ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
-                ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
-              </div>
-            `
-          } else {
-            // Empty cell
+        // Calculate position for this package
+        // Row 1: position = selectedColumn - 1 (0, 1, or 2)
+        // Row 2: position = 3 + (selectedColumn - 1) (3, 4, or 5)
+        // Row 3: position = 6 + (selectedColumn - 1) (6, 7, or 8)
+        // etc.
+        const currentRow = i  // Each package goes to the next row
+        const positionInRow = selectedColumn - 1
+        const currentPosition = currentRow * labelsPerRow + positionInRow
+        
+        // Fill empty cells before this package (only for first package)
+        if (i === 0) {
+          for (let j = 0; j < startPosition; j++) {
+            html += '<div></div>'
+          }
+        } else {
+          // Fill cells between previous package and this one
+          const previousPosition = (i - 1) * labelsPerRow + positionInRow
+          const cellsToFill = currentPosition - previousPosition - 1
+          for (let j = 0; j < cellsToFill; j++) {
             html += '<div></div>'
           }
         }
         
-        html += '</div>'
+        // Generate tracking URL for QR code
+        const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
+        
+        html += `
+          <div class="a4-label" style="width: 70mm; min-height: 30mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm; min-height: auto;">
+              <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
+              ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 12mm; height: 12mm; flex-shrink: 0;"></div>'}
+            </div>
+            <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+            ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
+            ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+          </div>
+        `
       }
+      
+      // Fill remaining empty cells after all packages
+      const lastPackagePosition = (packagesWithQR.length - 1) * labelsPerRow + (selectedColumn - 1)
+      const remainingCells = labelsPerPage - lastPackagePosition - 1
+      for (let i = 0; i < remainingCells; i++) {
+        html += '<div></div>'
+      }
+      
+      html += '</div>'
 
       const printContainer = document.createElement('div')
       printContainer.id = 'print-all-a4'
@@ -3681,8 +3706,10 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   }
 
   const downloadAllA4 = async () => {
-    if (packages.length === 0) {
-      toast.error('No packages to download')
+    const packagesToPrint = packages.filter(pkg => selectedPackagesForPrint.has(pkg.id))
+    
+    if (packagesToPrint.length === 0) {
+      toast.error('Ju lutemi zgjidhni të paktën një paketë')
       return
     }
 
@@ -3690,59 +3717,81 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     setIsPrintingAll(true)
 
     try {
-      // Generate QR codes for all packages
+      // Generate QR codes for selected packages
       const packagesWithQR: Array<{ pkg: any; qrCode: string | null }> = []
-      for (const pkg of packages) {
+      for (const pkg of packagesToPrint) {
         const qrCode = await generateQRCode(pkg.short_code)
         packagesWithQR.push({ pkg, qrCode })
       }
 
       // A4 dimensions: 210mm x 297mm
       // Label dimensions: 70mm x 30mm
-      // Margins: 10mm all around
       // Layout: 3 columns (horizontal) x 8 rows (vertical) = 24 labels per page
-      // 3 columns = 3 labels horizontally across
-      // 8 rows = 8 labels vertically down
+      // Place selected packages in the selected column, starting from row 1, going down vertically
+
       const labelsPerRow = 3  // 3 columns = 3 labels horizontally
       const labelsPerColumn = 8  // 8 rows = 8 labels vertically
       const labelsPerPage = labelsPerRow * labelsPerColumn
-      const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
-
-      let html = ''
       
-      for (let page = 0; page < totalPages; page++) {
-        const pageStart = page * labelsPerPage
-        const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
-        const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
-
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; padding-left: 0; padding-right: 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm; background: white;">'
+      // Calculate starting position: always start from row 1 in the selected column
+      // Column 1 = position 0, Column 2 = position 1, Column 3 = position 2
+      const startPosition = selectedColumn - 1  // Position in first row (0, 1, or 2)
+      
+      let html = ''
+      html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; padding-left: 0; padding-right: 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm; background: white;">'
+      
+      // Place selected packages in the selected column, going down rows
+      for (let i = 0; i < packagesWithQR.length; i++) {
+        const { pkg, qrCode } = packagesWithQR[i]
+        const parsed = parsePackageContents(pkg.contents_note || '')
         
-        for (let i = 0; i < labelsPerPage; i++) {
-          if (i < pagePackages.length) {
-            const { pkg, qrCode } = pagePackages[i]
-            const parsed = parsePackageContents(pkg.contents_note || '')
-            
-            // Generate tracking URL for QR code
-            const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
-            
-            html += `
-              <div class="a4-label" style="width: 70mm; min-height: 30mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm; min-height: auto;">
-                  <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
-                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 12mm; height: 12mm; flex-shrink: 0;"></div>'}
-                </div>
-                <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
-                ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
-                ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
-              </div>
-            `
-          } else {
+        // Calculate position for this package
+        // Row 1: position = selectedColumn - 1 (0, 1, or 2)
+        // Row 2: position = 3 + (selectedColumn - 1) (3, 4, or 5)
+        // Row 3: position = 6 + (selectedColumn - 1) (6, 7, or 8)
+        // etc.
+        const currentRow = i  // Each package goes to the next row
+        const positionInRow = selectedColumn - 1
+        const currentPosition = currentRow * labelsPerRow + positionInRow
+        
+        // Fill empty cells before this package (only for first package)
+        if (i === 0) {
+          for (let j = 0; j < startPosition; j++) {
+            html += '<div></div>'
+          }
+        } else {
+          // Fill cells between previous package and this one
+          const previousPosition = (i - 1) * labelsPerRow + positionInRow
+          const cellsToFill = currentPosition - previousPosition - 1
+          for (let j = 0; j < cellsToFill; j++) {
             html += '<div></div>'
           }
         }
         
-        html += '</div>'
+        // Generate tracking URL for QR code
+        const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
+        
+        html += `
+          <div class="a4-label" style="width: 70mm; min-height: 30mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm; min-height: auto;">
+              <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
+              ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 12mm; height: 12mm; flex-shrink: 0;"></div>'}
+            </div>
+            <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+            ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
+            ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+          </div>
+        `
       }
+      
+      // Fill remaining empty cells after all packages
+      const lastPackagePosition = (packagesWithQR.length - 1) * labelsPerRow + (selectedColumn - 1)
+      const remainingCells = labelsPerPage - lastPackagePosition - 1
+      for (let i = 0; i < remainingCells; i++) {
+        html += '<div></div>'
+      }
+      
+      html += '</div>'
 
       const downloadContainer = document.createElement('div')
       downloadContainer.id = 'download-all-a4'
@@ -3853,7 +3902,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         logging: false,
         backgroundColor: '#ffffff',
         width: 794, // A4 width in pixels at 96 DPI (210mm)
-        height: 1123 * totalPages, // A4 height * number of pages
+        height: 1123, // A4 height (single page)
       })
 
       // Create PDF
@@ -3890,10 +3939,10 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       downloadContainer.remove()
       downloadStyle.remove()
       setIsPrintingAll(false)
-      toast.success(`Successfully downloaded ${packages.length} labels as PDF`)
+      toast.success(`U shkarkuan me sukses ${packagesToPrint.length} etiketa si PDF`)
     } catch (error) {
       console.error('Download A4 error:', error)
-      toast.error('Failed to download labels')
+      toast.error('Dështoi shkarkimi i etiketave')
       setIsPrintingAll(false)
     }
   }
@@ -4154,42 +4203,221 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
 
       {/* Print All Dialog */}
       {showPrintAllDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Print All Labels</h3>
-            <p className="text-gray-600 mb-6">Choose your printer type:</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full p-6 my-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Zgjidh Paketat për Printim</h3>
             
-            <div className="space-y-3">
-              <button
-                onClick={printAllThermal}
+            {/* Search */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Kërko Paketa:
+              </label>
+              <input
+                type="text"
+                value={printSearchTerm}
+                onChange={(e) => setPrintSearchTerm(e.target.value)}
+                placeholder="Kërko sipas ID të paketës, emrit, mbiemrit, kompanisë ose adresës..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 disabled={isPrintingAll}
-                className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
+              />
+              <p className="text-xs text-gray-500 mt-1">Mund të kërkoni me ID të paketës (short_code), emër, mbiemër, kompani ose adresë</p>
+            </div>
+
+            {/* Column Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Zgjidh Kolonën (1-3):
+              </label>
+              <select
+                value={selectedColumn}
+                onChange={(e) => setSelectedColumn(Number(e.target.value))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                disabled={isPrintingAll}
               >
-                Thermal Printer (58mm x 40mm)
-              </button>
+                {[1, 2, 3].map(col => (
+                  <option key={col} value={col}>Kolona {col} {col === 2 ? '(E mesme - Parazgjedhur)' : ''}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Paketat do të printohen vertikalisht në kolonën e zgjedhur, duke filluar nga rreshti 1</p>
+            </div>
+
+            {/* Package Selection */}
+            <div className="mb-4 max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium text-gray-700">
+                  Zgjidh Paketat:
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const filtered = packages.filter(pkg => {
+                        if (!printSearchTerm) return true
+                        const parsed = parsePackageContents(pkg.contents_note || '')
+                        const searchLower = printSearchTerm.toLowerCase().trim()
+                        
+                        // Search by package ID (short_code)
+                        if (pkg.short_code?.toLowerCase().includes(searchLower)) return true
+                        
+                        // Search by name
+                        const fullName = ((parsed.name || '') + ' ' + (parsed.surname || '')).trim().toLowerCase()
+                        if (fullName.includes(searchLower)) return true
+                        
+                        // Search by individual name parts
+                        if (parsed.name?.toLowerCase().includes(searchLower)) return true
+                        if (parsed.surname?.toLowerCase().includes(searchLower)) return true
+                        
+                        // Search by company
+                        if (parsed.company?.toLowerCase().includes(searchLower)) return true
+                        
+                        // Search by address
+                        if (parsed.address?.toLowerCase().includes(searchLower)) return true
+                        
+                        return false
+                      })
+                      const allIds = new Set(filtered.map(p => p.id))
+                      setSelectedPackagesForPrint(allIds)
+                    }}
+                    className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                    disabled={isPrintingAll}
+                  >
+                    Zgjidh të Gjitha {printSearchTerm ? '(të filtruara)' : ''}
+                  </button>
+                  <button
+                    onClick={() => setSelectedPackagesForPrint(new Set())}
+                    className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                    disabled={isPrintingAll}
+                  >
+                    Pastro
+                  </button>
+                </div>
+              </div>
+              
+              {(() => {
+                const filteredPackages = packages.filter(pkg => {
+                  if (!printSearchTerm) return true
+                  const parsed = parsePackageContents(pkg.contents_note || '')
+                  const searchLower = printSearchTerm.toLowerCase().trim()
+                  
+                  // Search by package ID (short_code)
+                  if (pkg.short_code?.toLowerCase().includes(searchLower)) return true
+                  
+                  // Search by name
+                  const fullName = ((parsed.name || '') + ' ' + (parsed.surname || '')).trim().toLowerCase()
+                  if (fullName.includes(searchLower)) return true
+                  
+                  // Search by individual name parts
+                  if (parsed.name?.toLowerCase().includes(searchLower)) return true
+                  if (parsed.surname?.toLowerCase().includes(searchLower)) return true
+                  
+                  // Search by company
+                  if (parsed.company?.toLowerCase().includes(searchLower)) return true
+                  
+                  // Search by address
+                  if (parsed.address?.toLowerCase().includes(searchLower)) return true
+                  
+                  return false
+                })
+                
+                return filteredPackages.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">
+                    {printSearchTerm ? 'Nuk u gjetën paketa që përputhen me kërkimin' : 'Nuk ka paketa'}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredPackages.map((pkg) => {
+                      const parsed = parsePackageContents(pkg.contents_note || '')
+                      const isSelected = selectedPackagesForPrint.has(pkg.id)
+                      return (
+                        <label
+                          key={pkg.id}
+                          className={`flex items-start p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'border-red-500 bg-red-50'
+                              : 'border-gray-200 bg-white hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedPackagesForPrint)
+                              if (e.target.checked) {
+                                newSet.add(pkg.id)
+                              } else {
+                                newSet.delete(pkg.id)
+                              }
+                              setSelectedPackagesForPrint(newSet)
+                            }}
+                            className="mt-1 mr-3 w-4 h-4 text-red-600 focus:ring-red-500"
+                            disabled={isPrintingAll}
+                          />
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-900">{pkg.short_code}</div>
+                            <div className="text-sm text-gray-600">
+                              {((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}
+                              {parsed.company && ` | ${parsed.company}`}
+                            </div>
+                            {parsed.address && (
+                              <div className="text-xs text-gray-500 mt-1">{parsed.address.substring(0, 50)}...</div>
+                            )}
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-3 pt-4 border-t">
+              <div className="text-sm text-gray-600 mb-3">
+                {selectedPackagesForPrint.size > 0 ? (
+                  <span className="font-semibold text-red-600">
+                    {selectedPackagesForPrint.size} paketë{selectedPackagesForPrint.size !== 1 ? 'a' : ''} e zgjedhur për kolonën {selectedColumn}
+                  </span>
+                ) : (
+                  <span className="text-gray-500">Ju lutemi zgjidhni të paktën një paketë</span>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  onClick={printAllThermal}
+                  disabled={isPrintingAll || selectedPackagesForPrint.size === 0}
+                  className="px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Printer Termik (58mm x 40mm)
+                </button>
+                
+                <button
+                  onClick={printAllA4}
+                  disabled={isPrintingAll || selectedPackagesForPrint.size === 0}
+                  className="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Printer A4 (7cm x 30mm)
+                </button>
+                
+                <button
+                  onClick={downloadAllA4}
+                  disabled={isPrintingAll || selectedPackagesForPrint.size === 0}
+                  className="px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Shkarko PDF A4
+                </button>
+              </div>
               
               <button
-                onClick={printAllA4}
-                disabled={isPrintingAll}
-                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
-              >
-                A4 Printer (7cm x 31mm per label)
-              </button>
-              
-              <button
-                onClick={downloadAllA4}
-                disabled={isPrintingAll}
-                className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
-              >
-                Download A4 PDF
-              </button>
-              
-              <button
-                onClick={() => setShowPrintAllDialog(false)}
+                onClick={() => {
+                  setShowPrintAllDialog(false)
+                  setSelectedPackagesForPrint(new Set())
+                  setSelectedColumn(2) // Reset to middle column (column 2)
+                  setPrintSearchTerm('')
+                }}
                 disabled={isPrintingAll}
                 className="w-full px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold rounded-lg transition-colors"
               >
-                Cancel
+                Anulo
               </button>
             </div>
           </div>
