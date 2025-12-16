@@ -3506,68 +3506,109 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       // A4 dimensions: 210mm x 297mm
       // Label dimensions: 70mm x 30mm
       // Layout: 3 columns (horizontal) x 8 rows (vertical) = 24 labels per page
-      // Place selected packages in the selected column, starting from row 1, going down vertically
+      // Place selected packages: if selectedColumn is 0, distribute across all 3 columns, otherwise in selected column
 
       const labelsPerRow = 3  // 3 columns = 3 labels horizontally
       const labelsPerColumn = 8  // 8 rows = 8 labels vertically
       const labelsPerPage = labelsPerRow * labelsPerColumn
       
-      // Calculate starting position: always start from row 1 in the selected column
-      // Column 1 = position 0, Column 2 = position 1, Column 3 = position 2
-      const startPosition = selectedColumn - 1  // Position in first row (0, 1, or 2)
-      
       let html = ''
       html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; padding-left: 0; padding-right: 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm;">'
       
-      // Place selected packages in the selected column, going down rows
-      for (let i = 0; i < packagesWithQR.length; i++) {
-        const { pkg, qrCode } = packagesWithQR[i]
-        const parsed = parsePackageContents(pkg.contents_note || '')
-        
-        // Calculate position for this package
-        // Row 1: position = selectedColumn - 1 (0, 1, or 2)
-        // Row 2: position = 3 + (selectedColumn - 1) (3, 4, or 5)
-        // Row 3: position = 6 + (selectedColumn - 1) (6, 7, or 8)
-        // etc.
-        const currentRow = i  // Each package goes to the next row
-        const positionInRow = selectedColumn - 1
-        const currentPosition = currentRow * labelsPerRow + positionInRow
-        
-        // Fill empty cells before this package (only for first package)
-        if (i === 0) {
-          for (let j = 0; j < startPosition; j++) {
-            html += '<div></div>'
-          }
-        } else {
-          // Fill cells between previous package and this one
-          const previousPosition = (i - 1) * labelsPerRow + positionInRow
-          const cellsToFill = currentPosition - previousPosition - 1
+      if (selectedColumn === 0) {
+        // Distribute packages across all 3 columns
+        // Fill columns 1, 2, 3 in order: col1-row1, col2-row1, col3-row1, col1-row2, col2-row2, col3-row2, etc.
+        for (let i = 0; i < packagesWithQR.length; i++) {
+          const { pkg, qrCode } = packagesWithQR[i]
+          const parsed = parsePackageContents(pkg.contents_note || '')
+          
+          // Calculate position: distribute across columns
+          // Package 0: row 0, col 0 (position 0)
+          // Package 1: row 0, col 1 (position 1)
+          // Package 2: row 0, col 2 (position 2)
+          // Package 3: row 1, col 0 (position 3)
+          // Package 4: row 1, col 1 (position 4)
+          // etc.
+          const row = Math.floor(i / labelsPerRow)
+          const col = i % labelsPerRow
+          const position = row * labelsPerRow + col
+          
+          // Fill empty cells before this package
+          const previousPosition = i > 0 ? (Math.floor((i - 1) / labelsPerRow) * labelsPerRow + ((i - 1) % labelsPerRow)) : -1
+          const cellsToFill = position - previousPosition - 1
           for (let j = 0; j < cellsToFill; j++) {
             html += '<div></div>'
           }
+          
+          // Generate tracking URL for QR code
+          const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
+          
+          html += `
+            <div class="a4-label" style="width: 70mm; min-height: 30mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm; min-height: auto;">
+                <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
+                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 16mm; height: 16mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 16mm; height: 16mm; flex-shrink: 0;"></div>'}
+              </div>
+              <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+              ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
+              ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+            </div>
+          `
         }
         
-        // Generate tracking URL for QR code
-        const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
+        // Fill remaining empty cells
+        const lastPackagePosition = Math.floor((packagesWithQR.length - 1) / labelsPerRow) * labelsPerRow + ((packagesWithQR.length - 1) % labelsPerRow)
+        const remainingCells = labelsPerPage - lastPackagePosition - 1
+        for (let i = 0; i < remainingCells; i++) {
+          html += '<div></div>'
+        }
+      } else {
+        // Place packages in the selected column only
+        const startPosition = selectedColumn - 1  // Position in first row (0, 1, or 2)
         
-        html += `
-          <div class="a4-label" style="width: 70mm; min-height: 30mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm; min-height: auto;">
-              <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
-              ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 16mm; height: 16mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 16mm; height: 16mm; flex-shrink: 0;"></div>'}
+        for (let i = 0; i < packagesWithQR.length; i++) {
+          const { pkg, qrCode } = packagesWithQR[i]
+          const parsed = parsePackageContents(pkg.contents_note || '')
+          
+          const currentRow = i
+          const positionInRow = selectedColumn - 1
+          const currentPosition = currentRow * labelsPerRow + positionInRow
+          
+          // Fill empty cells before this package (only for first package)
+          if (i === 0) {
+            for (let j = 0; j < startPosition; j++) {
+              html += '<div></div>'
+            }
+          } else {
+            const previousPosition = (i - 1) * labelsPerRow + positionInRow
+            const cellsToFill = currentPosition - previousPosition - 1
+            for (let j = 0; j < cellsToFill; j++) {
+              html += '<div></div>'
+            }
+          }
+          
+          // Generate tracking URL for QR code
+          const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
+          
+          html += `
+            <div class="a4-label" style="width: 70mm; min-height: 30mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm; min-height: auto;">
+                <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
+                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 16mm; height: 16mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 16mm; height: 16mm; flex-shrink: 0;"></div>'}
+              </div>
+              <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+              ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
+              ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
             </div>
-            <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
-            ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
-            ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
-          </div>
-        `
-      }
-      
-      // Fill remaining empty cells after all packages
-      const lastPackagePosition = (packagesWithQR.length - 1) * labelsPerRow + (selectedColumn - 1)
-      const remainingCells = labelsPerPage - lastPackagePosition - 1
-      for (let i = 0; i < remainingCells; i++) {
-        html += '<div></div>'
+          `
+        }
+        
+        // Fill remaining empty cells
+        const lastPackagePosition = (packagesWithQR.length - 1) * labelsPerRow + (selectedColumn - 1)
+        const remainingCells = labelsPerPage - lastPackagePosition - 1
+        for (let i = 0; i < remainingCells; i++) {
+          html += '<div></div>'
+        }
       }
       
       html += '</div>'
