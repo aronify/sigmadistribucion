@@ -768,9 +768,12 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
         try {
           // Method 2: Direct torch property (some browsers)
           if ('torch' in track) {
-            await (track as any).torch = !flashOn
-            setFlashOn(!flashOn)
-            return
+            const torchObj = (track as any).torch
+            if (torchObj && typeof torchObj === 'object' && 'enabled' in torchObj) {
+              torchObj.enabled = !flashOn
+              setFlashOn(!flashOn)
+              return
+            }
           }
         } catch (err) {
           console.debug('Method 2 failed:', err)
