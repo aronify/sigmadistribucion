@@ -14,7 +14,7 @@ export const generateQRCode = async (shortCode: string): Promise<string | null> 
     const trackingUrl = `${window.location.origin}/track/${shortCode}`
     
     await QRCode.toCanvas(canvas, trackingUrl, {
-      width: 600, // Higher resolution for better print quality
+      width: 800, // Higher resolution for better print quality at larger size
       margin: 4, // More margin for better scanning, especially on low-quality printers
       color: {
         dark: '#000000',
