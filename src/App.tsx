@@ -3498,15 +3498,15 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       }
 
       // A4 dimensions: 210mm x 297mm
-      // Label dimensions: 70mm x 31mm
+      // Label dimensions: 70mm x 30mm
       // Margins: 10mm all around
       // Usable space: 190mm x 277mm
-      // Labels per row: 190 / 70 = 2.7, so 2 labels per row
-      // Labels per column: 277 / 31 = 8.9, so 8 labels per column
-      // Total: 2 x 8 = 16 labels per page
+      // Labels per row: 190 / 70 = 2.7, so 2 labels per row (but user wants 8 columns, so 8 labels per row)
+      // Labels per column: 277 / 30 = 9.2, so user wants 3 rows
+      // Total: 8 columns x 3 rows = 24 labels per page
 
-      const labelsPerRow = 2
-      const labelsPerColumn = 8
+      const labelsPerRow = 8
+      const labelsPerColumn = 3
       const labelsPerPage = labelsPerRow * labelsPerColumn
       const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
 
@@ -3517,22 +3517,25 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
         const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
 
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(8, 1fr); gap: 5mm;">'
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2mm;">'
         
         for (let i = 0; i < labelsPerPage; i++) {
           if (i < pagePackages.length) {
             const { pkg, qrCode } = pagePackages[i]
             const parsed = parsePackageContents(pkg.contents_note || '')
             
+            // Generate tracking URL for QR code
+            const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
+            
             html += `
-              <div class="a4-label" style="width: 70mm; height: 31mm; border: 0.5mm solid #000; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm;">
-                  <div style="font-weight: bold; font-size: 7pt;">${pkg.short_code || ''}</div>
-                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block;" onload="this.style.display='block';" onerror="this.style.display='none';" />` : '<div style="width: 12mm; height: 12mm;"></div>'}
+              <div class="a4-label" style="width: 70mm; height: 30mm; border: 0.5mm solid #000; padding: 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 5pt; background: white; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5mm;">
+                  <div style="font-weight: bold; font-size: 6pt;">${pkg.short_code || ''}</div>
+                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 10mm; height: 10mm; object-fit: contain; display: block;" alt="${trackingUrl}" />` : '<div style="width: 10mm; height: 10mm;"></div>'}
                 </div>
-                <div style="font-weight: bold; font-size: 8pt; margin-bottom: 0.5mm; text-transform: uppercase;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
-                ${parsed.company ? `<div style="font-size: 6pt; margin-bottom: 0.5mm; text-transform: uppercase;">${parsed.company}</div>` : ''}
-                ${parsed.address ? `<div style="font-size: 5pt; line-height: 1.2;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+                <div style="font-weight: bold; font-size: 7pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+                ${parsed.company ? `<div style="font-size: 5pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${parsed.company}</div>` : ''}
+                ${parsed.address ? `<div style="font-size: 4pt; line-height: 1.1;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
               </div>
             `
           } else {
@@ -3582,15 +3585,15 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             box-sizing: border-box !important;
             page-break-after: always !important;
             display: grid !important;
-            grid-template-columns: repeat(2, 1fr) !important;
-            grid-template-rows: repeat(8, 1fr) !important;
-            gap: 5mm !important;
+            grid-template-columns: repeat(8, 1fr) !important;
+            grid-template-rows: repeat(3, 1fr) !important;
+            gap: 2mm !important;
           }
           .a4-label {
             width: 70mm !important;
-            height: 31mm !important;
+            height: 30mm !important;
             border: 0.5mm solid #000 !important;
-            padding: 2mm !important;
+            padding: 1.5mm !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
@@ -3598,12 +3601,12 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             position: relative !important;
           }
           .a4-qr-code {
-            width: 12mm !important;
-            height: 12mm !important;
-            min-width: 12mm !important;
-            min-height: 12mm !important;
-            max-width: 12mm !important;
-            max-height: 12mm !important;
+            width: 10mm !important;
+            height: 10mm !important;
+            min-width: 10mm !important;
+            min-height: 10mm !important;
+            max-width: 10mm !important;
+            max-height: 10mm !important;
             object-fit: contain !important;
             display: block !important;
             image-rendering: -webkit-optimize-contrast !important;
@@ -3690,10 +3693,11 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       }
 
       // A4 dimensions: 210mm x 297mm
-      // Label dimensions: 70mm x 31mm
+      // Label dimensions: 70mm x 30mm
       // Margins: 10mm all around
-      const labelsPerRow = 2
-      const labelsPerColumn = 8
+      // Layout: 8 columns x 3 rows = 24 labels per page
+      const labelsPerRow = 8
+      const labelsPerColumn = 3
       const labelsPerPage = labelsPerRow * labelsPerColumn
       const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
 
@@ -3704,22 +3708,25 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
         const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
 
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(8, 1fr); gap: 5mm; background: white;">'
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2mm; background: white;">'
         
         for (let i = 0; i < labelsPerPage; i++) {
           if (i < pagePackages.length) {
             const { pkg, qrCode } = pagePackages[i]
             const parsed = parsePackageContents(pkg.contents_note || '')
             
+            // Generate tracking URL for QR code
+            const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
+            
             html += `
-              <div class="a4-label" style="width: 70mm; height: 31mm; border: 0.5mm solid #000; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm;">
-                  <div style="font-weight: bold; font-size: 7pt;">${pkg.short_code || ''}</div>
-                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block;" />` : '<div style="width: 12mm; height: 12mm;"></div>'}
+              <div class="a4-label" style="width: 70mm; height: 30mm; border: 0.5mm solid #000; padding: 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 5pt; background: white; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5mm;">
+                  <div style="font-weight: bold; font-size: 6pt;">${pkg.short_code || ''}</div>
+                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 10mm; height: 10mm; object-fit: contain; display: block;" alt="${trackingUrl}" />` : '<div style="width: 10mm; height: 10mm;"></div>'}
                 </div>
-                <div style="font-weight: bold; font-size: 8pt; margin-bottom: 0.5mm; text-transform: uppercase;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
-                ${parsed.company ? `<div style="font-size: 6pt; margin-bottom: 0.5mm; text-transform: uppercase;">${parsed.company}</div>` : ''}
-                ${parsed.address ? `<div style="font-size: 5pt; line-height: 1.2;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+                <div style="font-weight: bold; font-size: 7pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+                ${parsed.company ? `<div style="font-size: 5pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${parsed.company}</div>` : ''}
+                ${parsed.address ? `<div style="font-size: 4pt; line-height: 1.1;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
               </div>
             `
           } else {
@@ -3753,17 +3760,17 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           padding: 10mm !important;
           box-sizing: border-box !important;
           display: grid !important;
-          grid-template-columns: repeat(2, 1fr) !important;
-          grid-template-rows: repeat(8, 1fr) !important;
-          gap: 5mm !important;
+          grid-template-columns: repeat(8, 1fr) !important;
+          grid-template-rows: repeat(3, 1fr) !important;
+          gap: 2mm !important;
           background: white !important;
           page-break-after: always !important;
         }
         .a4-label {
           width: 70mm !important;
-          height: 31mm !important;
+          height: 30mm !important;
           border: 0.5mm solid #000 !important;
-          padding: 2mm !important;
+          padding: 1.5mm !important;
           box-sizing: border-box !important;
           display: flex !important;
           flex-direction: column !important;
@@ -3771,12 +3778,12 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           position: relative !important;
         }
         .a4-qr-code {
-          width: 12mm !important;
-          height: 12mm !important;
-          min-width: 12mm !important;
-          min-height: 12mm !important;
-          max-width: 12mm !important;
-          max-height: 12mm !important;
+          width: 10mm !important;
+          height: 10mm !important;
+          min-width: 10mm !important;
+          min-height: 10mm !important;
+          max-width: 10mm !important;
+          max-height: 10mm !important;
           object-fit: contain !important;
           display: block !important;
         }
