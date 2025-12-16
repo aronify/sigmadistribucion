@@ -258,15 +258,22 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           const mobileConfig: any = {
             fps: 60, // Increased FPS for faster scanning
             qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
-              // Larger scanning box for mobile (easier to use) - use 85% for faster detection
-              const minEdgePercentage = 0.85
+              // Larger scanning box for mobile (easier to use) - use 90% for better detection
+              const minEdgePercentage = 0.90
               const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight) * minEdgePercentage
               return {
                 width: Math.floor(minEdgeSize),
                 height: Math.floor(minEdgeSize)
               }
             },
-            aspectRatio: 1.0
+            aspectRatio: 1.0,
+            disableFlip: false, // Allow auto-flip for better scanning
+            supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA],
+            videoConstraints: {
+              facingMode: 'environment',
+              focusMode: 'continuous', // Auto-focus for better scanning
+              exposureMode: 'continuous'
+            }
           }
 
           await html5QrCode.start(
@@ -304,6 +311,25 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           
           // Set a placeholder cameraId for mobile
           setCameraId('mobile-environment')
+          
+          // Check for torch/flash support on mobile
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'environment' }
+            })
+            const track = stream.getVideoTracks()[0]
+            if (track && 'getCapabilities' in track) {
+              const caps = track.getCapabilities()
+              if ((caps as any).torch || (caps as any).advanced?.some((opt: any) => opt.torch)) {
+                setHasFlash(true)
+                // Store track reference for torch control
+                ;(window as any).cameraTrack = track
+              }
+            }
+            // Don't stop the stream - keep it for torch control
+          } catch (err) {
+            console.debug('Torch check failed:', err)
+          }
           
           return // Success, exit early
         } catch (mobileError: any) {
@@ -349,10 +375,10 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
       setCameraId(selectedCamera.id)
 
       const config = {
-        fps: 30, // Increased FPS for faster scanning
+        fps: 60, // Increased FPS for faster scanning
         qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
-          // Larger scanning box for faster detection
-          const minEdgePercentage = 0.8 // 80% of the smaller dimension
+          // Larger scanning box for faster detection - 85% for better coverage
+          const minEdgePercentage = 0.85
           const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight) * minEdgePercentage
           const qrboxSize = Math.floor(minEdgeSize)
           return {
@@ -361,7 +387,9 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           }
         },
         aspectRatio: 1.0,
-        verbose: false
+        verbose: false,
+        disableFlip: false, // Allow auto-flip for better scanning
+        supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA]
       }
 
       // Use optimized configuration for faster scanning
@@ -370,8 +398,10 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
         selectedCamera.id,
         {
           fps: config.fps,
-          qrbox: { width: 300, height: 300 }, // Larger box for faster detection
-          aspectRatio: config.aspectRatio
+          qrbox: config.qrbox, // Use dynamic sizing
+          aspectRatio: config.aspectRatio,
+          disableFlip: config.disableFlip,
+          supportedScanTypes: config.supportedScanTypes
         },
           (decodedText, decodedResult) => {
             // Only process if we have valid text
@@ -418,20 +448,27 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
         // Check for torch/flash support (mainly for mobile devices)
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: selectedCamera.id }
+            video: { 
+              deviceId: selectedCamera.id,
+              facingMode: isMobile ? 'environment' : undefined
+            }
           })
           const track = stream.getVideoTracks()[0]
           if (track && 'getCapabilities' in track) {
             const caps = track.getCapabilities()
-            if ((caps as any).torch) {
+            // Check for torch support
+            if ((caps as any).torch || (caps as any).advanced?.some((opt: any) => opt.torch)) {
               setHasFlash(true)
+              // Store track reference for torch control
+              ;(window as any).cameraTrack = track
             } else {
               setHasFlash(false)
             }
           } else {
             setHasFlash(false)
           }
-          stream.getTracks().forEach(t => t.stop())
+          // Don't stop the stream - keep it for torch control
+          // stream.getTracks().forEach(t => t.stop())
         } catch {
           setHasFlash(false)
         }
@@ -688,48 +725,69 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
   }
 
   const toggleFlash = async () => {
-    if (!hasFlash || !cameraId || !scannerRef.current) return
+    if (!hasFlash) return
 
     try {
-      // Stop scanner temporarily
-      await stopScanner()
+      // Get the camera track (stored from camera initialization)
+      const track = (window as any).cameraTrack
       
-      // Restart with torch
-      const html5QrCode = new Html5Qrcode('barcode-scanner')
-      scannerRef.current = html5QrCode
-      
-      const config = {
-        fps: 60, // Increased FPS for faster scanning
-        qrbox: { width: 350, height: 350 }, // Larger box for faster detection
-        aspectRatio: 1.0
+      if (!track) {
+        // If no track stored, try to get it from the current stream
+        const streams = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        })
+        const videoTrack = streams.getVideoTracks()[0]
+        if (videoTrack && 'applyConstraints' in videoTrack) {
+          try {
+            await (videoTrack as any).applyConstraints({
+              advanced: [{ torch: !flashOn }]
+            })
+            setFlashOn(!flashOn)
+            // Store track for future toggles
+            ;(window as any).cameraTrack = videoTrack
+          } catch (err) {
+            console.debug('Torch toggle failed:', err)
+          }
+        }
+        return
       }
 
-      await html5QrCode.start(
-        cameraId,
-        config,
-        (decodedText, decodedResult) => {
-          const format = (decodedResult as any).result?.format?.formatName || 'UNKNOWN'
-          handleScanSuccess(decodedText, format)
-        },
-        () => {}
-      )
-
-      // Try to enable torch via constraints
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: cameraId }, facingMode: 'environment' }
-      })
-      const track = stream.getVideoTracks()[0]
-      if (track && 'applyConstraints' in track) {
+      // Try multiple methods to toggle torch
+      if ('applyConstraints' in track) {
         try {
+          // Method 1: Using applyConstraints with advanced options
           await (track as any).applyConstraints({
             advanced: [{ torch: !flashOn }]
           })
           setFlashOn(!flashOn)
-        } catch {
-          // Torch not supported or failed
+          return
+        } catch (err) {
+          console.debug('Method 1 failed, trying method 2:', err)
+        }
+
+        try {
+          // Method 2: Direct torch property (some browsers)
+          if ('torch' in track) {
+            await (track as any).torch = !flashOn
+            setFlashOn(!flashOn)
+            return
+          }
+        } catch (err) {
+          console.debug('Method 2 failed:', err)
+        }
+
+        try {
+          // Method 3: Using getSettings and applyConstraints
+          const settings = track.getSettings()
+          await track.applyConstraints({
+            ...settings,
+            advanced: [{ torch: !flashOn }]
+          })
+          setFlashOn(!flashOn)
+        } catch (err) {
+          console.debug('Method 3 failed:', err)
         }
       }
-      stream.getTracks().forEach(t => t.stop())
     } catch (error) {
       console.error('Flash toggle error:', error)
     }
@@ -1314,17 +1372,21 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           >
             <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
-          {hasFlash && (
-            <button
-              onClick={toggleFlash}
-              disabled={!hasFlash}
-              className="p-2 sm:p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-              title={flashOn ? t('scanner.flashOff') : t('scanner.flash')}
-              aria-label={flashOn ? t('scanner.flashOff') : t('scanner.flash')}
-            >
-              {flashOn ? <FlashlightOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Flashlight className="w-5 h-5 sm:w-6 sm:h-6" />}
-            </button>
-          )}
+          <button
+            onClick={toggleFlash}
+            disabled={!hasFlash}
+            className={`p-2 sm:p-2.5 rounded-lg transition-colors ${
+              hasFlash 
+                ? flashOn 
+                  ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                : 'text-gray-400 cursor-not-allowed opacity-50'
+            }`}
+            title={hasFlash ? (flashOn ? t('scanner.flashOff') : t('scanner.flash')) : t('scanner.flashUnavailable')}
+            aria-label={hasFlash ? (flashOn ? t('scanner.flashOff') : t('scanner.flash')) : t('scanner.flashUnavailable')}
+          >
+            {flashOn ? <FlashlightOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Flashlight className="w-5 h-5 sm:w-6 sm:h-6" />}
+          </button>
           <button
             onClick={onClose}
             className="p-2 sm:p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"

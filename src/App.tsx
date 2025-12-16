@@ -3517,7 +3517,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
         const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
 
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm;">'
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm; padding-left: 0; padding-right: 0;">'
         
         for (let i = 0; i < labelsPerPage; i++) {
           if (i < pagePackages.length) {
@@ -3582,6 +3582,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             height: 297mm !important;
             margin: 0 !important;
             padding: 5mm 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
             box-sizing: border-box !important;
             page-break-after: always !important;
             display: grid !important;
@@ -3713,7 +3715,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
         const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
 
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm; background: white;">'
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 5mm 0; padding-left: 0; padding-right: 0; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm; background: white;">'
         
         for (let i = 0; i < labelsPerPage; i++) {
           if (i < pagePackages.length) {
@@ -3763,6 +3765,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           height: 297mm !important;
           margin: 0 !important;
           padding: 5mm 0 !important;
+          padding-left: 0 !important;
+          padding-right: 0 !important;
           box-sizing: border-box !important;
           display: grid !important;
           grid-template-columns: repeat(3, 1fr) !important;
