@@ -548,45 +548,54 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
     }
 
     try {
-      // Parse the decoded text
+      // Parse the decoded text - extract short_code from URL if it's a tracking URL
       let packageId: string
       try {
         const payload = JSON.parse(decodedText)
         packageId = payload.pkg || payload.id || decodedText
       } catch {
-        packageId = decodedText
+        // Check if it's a tracking URL (e.g., https://example.com/track/ABC123 or /track/ABC123)
+        const urlMatch = decodedText.match(/\/track\/([^\/\?]+)/i)
+        if (urlMatch && urlMatch[1]) {
+          // Extract short_code from URL
+          packageId = urlMatch[1].trim()
+          console.log('[Scanner] Extracted short_code from URL:', packageId)
+        } else {
+          // Use decoded text directly (might be short_code or ID)
+          packageId = decodedText.trim()
+        }
       }
 
       // Look up the package by ID or short_code
       let packageData: any = null
       
-      // Try by ID first
-      const { data: dataById, error: errorById } = await supabase
+      // Try by short_code first (most common case)
+      const { data: dataByCode, error: errorByCode } = await supabase
         .from('packages')
         .select(`
           *,
           destination_branch:branches(name, code),
           created_by_user:users!packages_created_by_fkey(name)
         `)
-        .eq('id', packageId)
+        .eq('short_code', packageId)
         .maybeSingle()
-
-      if (dataById && !errorById) {
-        packageData = dataById
+      
+      if (dataByCode && !errorByCode) {
+        packageData = dataByCode
       } else {
-        // Try by short_code
-        const { data: dataByCode, error: errorByCode } = await supabase
+        // Try by ID as fallback
+        const { data: dataById, error: errorById } = await supabase
           .from('packages')
           .select(`
             *,
             destination_branch:branches(name, code),
             created_by_user:users!packages_created_by_fkey(name)
           `)
-          .eq('short_code', packageId)
+          .eq('id', packageId)
           .maybeSingle()
-        
-        if (dataByCode && !errorByCode) {
-          packageData = dataByCode
+
+        if (dataById && !errorById) {
+          packageData = dataById
         }
       }
 

@@ -3528,14 +3528,14 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
             
             html += `
-              <div class="a4-label" style="width: 70mm; height: 30mm; border: 0.5mm solid #000; padding: 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 5pt; background: white; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5mm;">
-                  <div style="font-weight: bold; font-size: 6pt;">${pkg.short_code || ''}</div>
-                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 10mm; height: 10mm; object-fit: contain; display: block;" alt="${trackingUrl}" />` : '<div style="width: 10mm; height: 10mm;"></div>'}
+              <div class="a4-label" style="width: 70mm; min-height: 30mm; border: 0.5mm solid #000; padding: 1mm 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 5pt; background: white; position: relative; overflow: visible;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.3mm; min-height: auto;">
+                  <div style="font-weight: bold; font-size: 5pt; line-height: 1;">${pkg.short_code || ''}</div>
+                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 8mm; height: 8mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 8mm; height: 8mm; flex-shrink: 0;"></div>'}
                 </div>
-                <div style="font-weight: bold; font-size: 7pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
-                ${parsed.company ? `<div style="font-size: 5pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${parsed.company}</div>` : ''}
-                ${parsed.address ? `<div style="font-size: 4pt; line-height: 1.1;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+                <div style="font-weight: bold; font-size: 7pt; margin-bottom: 0.5mm; margin-top: 0.2mm; text-transform: uppercase; line-height: 1.2; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+                ${parsed.company ? `<div style="font-size: 5pt; margin-bottom: 0.2mm; text-transform: uppercase; line-height: 1.1; flex: 0 0 auto;">${parsed.company}</div>` : ''}
+                ${parsed.address ? `<div style="font-size: 4pt; line-height: 1.1; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
               </div>
             `
           } else {
@@ -3586,29 +3586,32 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             page-break-after: always !important;
             display: grid !important;
             grid-template-columns: repeat(8, 1fr) !important;
-            grid-template-rows: repeat(3, 1fr) !important;
+            grid-template-rows: repeat(3, minmax(auto, 1fr)) !important;
             gap: 2mm !important;
+            align-items: start !important;
           }
           .a4-label {
             width: 70mm !important;
-            height: 30mm !important;
+            min-height: 30mm !important;
             border: 0.5mm solid #000 !important;
-            padding: 1.5mm !important;
+            padding: 1mm 1.5mm !important;
             box-sizing: border-box !important;
             display: flex !important;
             flex-direction: column !important;
             background: white !important;
             position: relative !important;
+            overflow: visible !important;
           }
           .a4-qr-code {
-            width: 10mm !important;
-            height: 10mm !important;
-            min-width: 10mm !important;
-            min-height: 10mm !important;
-            max-width: 10mm !important;
-            max-height: 10mm !important;
+            width: 8mm !important;
+            height: 8mm !important;
+            min-width: 8mm !important;
+            min-height: 8mm !important;
+            max-width: 8mm !important;
+            max-height: 8mm !important;
             object-fit: contain !important;
             display: block !important;
+            flex-shrink: 0 !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
           }
@@ -3719,14 +3722,14 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
             
             html += `
-              <div class="a4-label" style="width: 70mm; height: 30mm; border: 0.5mm solid #000; padding: 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 5pt; background: white; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5mm;">
-                  <div style="font-weight: bold; font-size: 6pt;">${pkg.short_code || ''}</div>
-                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 10mm; height: 10mm; object-fit: contain; display: block;" alt="${trackingUrl}" />` : '<div style="width: 10mm; height: 10mm;"></div>'}
+              <div class="a4-label" style="width: 70mm; min-height: 30mm; border: 0.5mm solid #000; padding: 1mm 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 5pt; background: white; position: relative; overflow: visible;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.3mm; min-height: auto;">
+                  <div style="font-weight: bold; font-size: 5pt; line-height: 1;">${pkg.short_code || ''}</div>
+                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 8mm; height: 8mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 8mm; height: 8mm; flex-shrink: 0;"></div>'}
                 </div>
-                <div style="font-weight: bold; font-size: 7pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
-                ${parsed.company ? `<div style="font-size: 5pt; margin-bottom: 0.3mm; text-transform: uppercase; line-height: 1.1;">${parsed.company}</div>` : ''}
-                ${parsed.address ? `<div style="font-size: 4pt; line-height: 1.1;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+                <div style="font-weight: bold; font-size: 7pt; margin-bottom: 0.5mm; margin-top: 0.2mm; text-transform: uppercase; line-height: 1.2; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+                ${parsed.company ? `<div style="font-size: 5pt; margin-bottom: 0.2mm; text-transform: uppercase; line-height: 1.1; flex: 0 0 auto;">${parsed.company}</div>` : ''}
+                ${parsed.address ? `<div style="font-size: 4pt; line-height: 1.1; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
               </div>
             `
           } else {
@@ -3761,31 +3764,34 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           box-sizing: border-box !important;
           display: grid !important;
           grid-template-columns: repeat(8, 1fr) !important;
-          grid-template-rows: repeat(3, 1fr) !important;
+          grid-template-rows: repeat(3, minmax(auto, 1fr)) !important;
           gap: 2mm !important;
           background: white !important;
           page-break-after: always !important;
+          align-items: start !important;
         }
         .a4-label {
           width: 70mm !important;
-          height: 30mm !important;
+          min-height: 30mm !important;
           border: 0.5mm solid #000 !important;
-          padding: 1.5mm !important;
+          padding: 1mm 1.5mm !important;
           box-sizing: border-box !important;
           display: flex !important;
           flex-direction: column !important;
           background: white !important;
           position: relative !important;
+          overflow: visible !important;
         }
         .a4-qr-code {
-          width: 10mm !important;
-          height: 10mm !important;
-          min-width: 10mm !important;
-          min-height: 10mm !important;
-          max-width: 10mm !important;
-          max-height: 10mm !important;
+          width: 8mm !important;
+          height: 8mm !important;
+          min-width: 8mm !important;
+          min-height: 8mm !important;
+          max-width: 8mm !important;
+          max-height: 8mm !important;
           object-fit: contain !important;
           display: block !important;
+          flex-shrink: 0 !important;
         }
       `
       document.head.appendChild(downloadStyle)
