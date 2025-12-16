@@ -32,6 +32,7 @@ export interface Package {
 }
 
 export type PackageStatus = 
+  | 'just_created'
   | 'created'
   | 'queued_for_print'
   | 'printed'

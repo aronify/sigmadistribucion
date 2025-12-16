@@ -1,114 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
 import { useAuth } from './lib/auth'
 import { supabase, getLogoUrl } from './lib/supabase'
 import { ConfirmationDialog } from './components/ConfirmationDialog'
 import { BarcodeScanner } from './components/BarcodeScanner'
+import { PackageTracking } from './components/PackageTracking'
 import LanguageSwitcher from './components/LanguageSwitcher'
+import { PinLogin } from './components/auth/PinLogin'
 import { useTranslation } from 'react-i18next'
-import QRCode from 'qrcode'
 import * as XLSX from 'xlsx'
 
-// Logo utility function - converts image to base64 for reliable printing
-// Uses Supabase Storage URL first, then falls back to local
-const loadLogoAsBase64 = async (): Promise<string | null> => {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    
-    // Only try Supabase Storage URL - no local fallbacks to avoid 404s on Vercel
-    const logoPaths = [
-      getLogoUrl() // Supabase Storage URL
-    ]
-    
-    let currentPathIndex = 0
-    
-    const tryNextPath = () => {
-      if (currentPathIndex >= logoPaths.length) {
-        console.warn('[Logo] No logo paths worked, returning null')
-        resolve(null)
-        return
-      }
-      
-      const path = logoPaths[currentPathIndex]
-      console.log(`[Logo] Trying path: ${path}`)
-      img.src = path
-      
-      img.onload = () => {
-        console.log(`[Logo] Successfully loaded from: ${path}`)
-        try {
-          const canvas = document.createElement('canvas')
-          canvas.width = img.width
-          canvas.height = img.height
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.drawImage(img, 0, 0)
-            const base64 = canvas.toDataURL('image/png')
-            console.log('[Logo] Converted to base64 successfully')
-            resolve(base64)
-          } else {
-            console.warn('[Logo] Could not get canvas context')
-            tryNextPath()
-          }
-        } catch (error) {
-          console.warn('[Logo] Failed to convert logo to base64:', error)
-          tryNextPath()
-        }
-      }
-      
-      img.onerror = (e) => {
-        console.warn(`[Logo] Failed to load from: ${path}`)
-        currentPathIndex++
-        tryNextPath()
-      }
-    }
-    
-    tryNextPath()
-  })
-}
-
-// Preload logo and cache it
-// Uses Supabase Storage URL first, then falls back to local
-let logoCache: string | null = null
-const preloadLogo = async (): Promise<string> => {
-  if (logoCache) {
-    return logoCache
-  }
-  
-  // Try Supabase Storage URL first
-  const supabaseLogoUrl = getLogoUrl()
-  
-  try {
-    console.log(`[Logo] Attempting to load from Supabase Storage: ${supabaseLogoUrl}`)
-    const response = await fetch(supabaseLogoUrl, { 
-      cache: 'no-cache',
-      mode: 'cors'
-    })
-    
-    if (response.ok) {
-      const blob = await response.blob()
-      const reader = new FileReader()
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-      logoCache = base64
-      console.log(`[Logo] ✓ Successfully preloaded from Supabase Storage`)
-      return base64
-    } else {
-      console.warn(`[Logo] HTTP ${response.status} for Supabase Storage, trying local fallback`)
-    }
-  } catch (error) {
-    console.warn(`[Logo] Failed to preload from Supabase Storage:`, error)
-  }
-  
-  // No local fallback - only use Supabase Storage to avoid 404s on Vercel
-  // Return the Supabase Storage URL directly
-  console.log('[Logo] Using Supabase Storage URL')
-  return supabaseLogoUrl
-}
+// Import utilities
+import { loadLogoAsBase64, preloadLogo } from './utils/logo'
+import { generateQRCode } from './utils/qrCode'
+import { parseContentsNote, formatContentsNote } from './utils/packageParsing'
+import { labelPrintStyles } from './styles/labelPrintStyles'
 
 // Get Supabase URL and key for environment check
 // @ts-ignore - Vite environment variables
@@ -116,201 +24,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.su
 // @ts-ignore - Vite environment variables
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key'
 
-// Simple PIN Login Component with barcode/keyboard support
-function PinLogin({ onSuccess }: { onSuccess: () => void }) {
-  const { login } = useAuth()
-  const { t } = useTranslation()
-  const [pin, setPin] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [logo, setLogo] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handleSubmit = useCallback(async () => {
-    if (pin.length !== 6) return
-    
-    setIsLoading(true)
-    
-    try {
-      // Use auth context login which validates active users
-      const success = await login(pin)
-      
-      if (success) {
-        setPin('')
-        onSuccess()
-      } else {
-        setPin('')
-      }
-    } catch (error) {
-      console.error('Login error:', error)
-      setIsLoading(false)
-      setPin('')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [pin, login, onSuccess])
-
-  useEffect(() => {
-    // Focus input on mount for keyboard support
-    if (inputRef.current) {
-      inputRef.current.focus()
-    }
-    
-    // Use Supabase Storage URL for logo
-    const logoUrl = getLogoUrl()
-    setLogo(logoUrl)
-    
-    // Logo is now always from Supabase Storage, no need to listen for updates
-  }, [])
-
-  // Auto-submit when PIN reaches 6 digits
-  useEffect(() => {
-    if (pin.length === 6 && !isLoading) {
-      const timer = setTimeout(() => {
-        handleSubmit()
-      }, 200) // Small delay to ensure state is settled
-      return () => clearTimeout(timer)
-    }
-  }, [pin.length, isLoading, handleSubmit])
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      if (pin.length === 6) {
-        handleSubmit()
-      }
-    } else if (e.key === 'Backspace') {
-      // Allow backspace to work naturally with the input
-      // Don't prevent default so it works with the input field
-    } else if (e.key >= '0' && e.key <= '9') {
-      // Allow numbers to work naturally with the input
-      // Don't prevent default so it works with the input field
-    } else if (e.key.length === 1) {
-      // Prevent non-numeric characters
-      e.preventDefault()
-    }
-  }
-
-  const handleBarcodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    // Filter to only allow digits
-    const digitsOnly = value.replace(/\D/g, '')
-    
-    // If it looks like a barcode (longer than 6 digits), extract PIN
-    if (digitsOnly.length > 6) {
-      // Extract last 6 digits as PIN
-      const extractedPin = digitsOnly.slice(-6)
-      setPin(extractedPin)
-    } else if (digitsOnly.length <= 6) {
-      setPin(digitsOnly)
-    }
-    // Auto-submit is handled by useEffect when pin.length === 6
-  }
-
-  const numbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="mb-4">
-            <img 
-              src={logo || getLogoUrl()} 
-              alt="Company Logo" 
-              width="80"
-              height="80"
-              className="w-20 h-20 mx-auto object-contain"
-              onError={(e) => {
-                const target = e.currentTarget as HTMLImageElement
-                console.error('[Logo] Failed to load logo from Supabase Storage:', target.src)
-                // Hide on error - no fallback to avoid 404s on Vercel
-                target.style.display = 'none'
-              }}
-              onLoad={() => {
-                console.log('[Logo] Logo loaded successfully from:', logo || getLogoUrl())
-              }}
-            />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('login.title')}</h1>
-          <p className="text-gray-600">{t('login.subtitle')}</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-          {/* Hidden input for keyboard typing and barcode scanning */}
-          <input
-            ref={inputRef}
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={pin}
-            onChange={handleBarcodeInput}
-            onKeyDown={handleKeyPress}
-            className="sr-only"
-            placeholder={t('login.placeholder')}
-            maxLength={6}
-            disabled={isLoading}
-            autoFocus
-          />
-          
-          <div className="text-center mb-6">
-            <div className="flex justify-center space-x-2 mb-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-4 h-4 rounded-full border-2 ${
-                    i < pin.length 
-                      ? 'bg-red-600 border-red-600' 
-                      : 'border-gray-300'
-                  }`}
-                />
-              ))}
-            </div>
-            <p className="text-sm text-gray-500">
-              {t('login.instruction')}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4 max-w-sm mx-auto">
-            {numbers.map((num) => (
-              <button
-                key={num}
-                onClick={() => setPin(prev => prev + num)}
-                disabled={pin.length >= 6 || isLoading}
-                className="aspect-square bg-white border-2 border-gray-300 rounded-xl text-2xl font-bold hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50"
-              >
-                {num}
-              </button>
-            ))}
-            <button
-              onClick={() => setPin('')}
-              disabled={pin.length === 0 || isLoading}
-              className="aspect-square bg-white border-2 border-gray-300 rounded-xl text-2xl font-bold hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50"
-            >
-              {t('login.clear')}
-            </button>
-            <button
-              onClick={() => setPin(prev => prev.slice(0, -1))}
-              disabled={pin.length === 0 || isLoading}
-              className="aspect-square bg-white border-2 border-gray-300 rounded-xl text-2xl font-bold hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50"
-            >
-              ⌫
-            </button>
-          </div>
-
-          <div className="mt-6">
-            <button
-              onClick={handleSubmit}
-              disabled={pin.length !== 6 || isLoading}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isLoading ? t('login.signingIn') : t('login.signin')}
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  )
-}
+// PinLogin is now imported from components/auth/PinLogin.tsx
 
 // Create Label Modal with proper fields
 function CreateLabelModal({ onClose }: { onClose: () => void }) {
@@ -336,6 +50,28 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     loadInventoryItems()
   }, [])
+
+  // Preload logo when package is created
+  useEffect(() => {
+    if (createdPackage && printRef.current) {
+      const loadLogo = async () => {
+        const logoBase64 = await loadLogoAsBase64()
+        const logoImg = printRef.current?.querySelector('#label-logo-img') as HTMLImageElement || 
+                       printRef.current?.querySelector('.logo') as HTMLImageElement
+        if (logoImg) {
+          if (logoBase64) {
+            logoImg.src = logoBase64
+          } else {
+            logoImg.src = getLogoUrl()
+          }
+          logoImg.style.display = 'block'
+          logoImg.style.visibility = 'visible'
+          logoImg.style.opacity = '1'
+        }
+      }
+      loadLogo()
+    }
+  }, [createdPackage])
 
   const loadInventoryItems = async () => {
     try {
@@ -429,6 +165,8 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
         const packageInserts: any[] = []
         const inventoryUpdates: Array<{ itemId: string; delta: number; item: any }> = []
         const inventoryMovements: any[] = []
+        // Track running totals of allocated stock per item in this batch
+        const allocatedStock = new Map<string, number>()
 
         // Process each row in the batch
         for (let rowIdx = 0; rowIdx < batch.length; rowIdx++) {
@@ -497,6 +235,36 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
               continue
             }
 
+            // Validate stock availability before creating package
+            let hasInsufficientStock = false
+            const stockIssues: string[] = []
+            for (const product of importedItems) {
+              const item = inventoryItems.find(i => i.id === product.productId)
+              if (item) {
+                // Check if we have enough stock (considering all packages already processed in this batch)
+                const currentStock = item.stock_on_hand
+                const alreadyAllocated = allocatedStock.get(item.id) || 0
+                const totalNeeded = alreadyAllocated + product.quantity
+                
+                if (currentStock < totalNeeded) {
+                  hasInsufficientStock = true
+                  stockIssues.push(`${item.name}: need ${totalNeeded}, have ${currentStock}`)
+                }
+              }
+            }
+
+            if (hasInsufficientStock) {
+              errors.push(`Row ${rowNum}: Insufficient stock - ${stockIssues.join('; ')}`)
+              errorCount++
+              continue
+            }
+
+            // Update allocated stock tracking for this package
+            for (const product of importedItems) {
+              const currentAllocated = allocatedStock.get(product.productId) || 0
+              allocatedStock.set(product.productId, currentAllocated + product.quantity)
+            }
+
             // Generate short code and package ID
             const shortCode = Math.random().toString(36).substr(2, 6).toUpperCase()
             const packageId = crypto.randomUUID()
@@ -558,52 +326,105 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
           } else if (createdPackages) {
             successCount += createdPackages.length
 
-            // Create inventory movements linked to actual package IDs
+            // CRITICAL: Deduct stock for all successfully created packages
+            // Build a map of items to deduct based on ACTUALLY CREATED packages only
+            const stockDeductions = new Map<string, number>()
             const movementsToInsert: any[] = []
+            
             for (let pkgIdx = 0; pkgIdx < createdPackages.length; pkgIdx++) {
               const pkg = createdPackages[pkgIdx]
               const originalPkg = packageInserts[pkgIdx]
               const shortCode = pkg.short_code
               
-              // Create movements for each item in this package
+              // Process each item in this successfully created package
               for (const product of originalPkg._items || []) {
-                const item = inventoryItems.find(i => i.id === product.productId)
-                if (item) {
+                const itemId = product.productId
+                const quantity = product.quantity
+                
+                // Track stock deduction
+                const currentDeduction = stockDeductions.get(itemId) || 0
+                stockDeductions.set(itemId, currentDeduction + quantity)
+                
+                // Create inventory movement record
                   movementsToInsert.push({
-                    item_id: item.id,
-                    delta: -product.quantity,
-                    reason: `Package ${shortCode} created`,
+                  item_id: itemId,
+                  delta: -quantity, // Negative for deduction
+                  reason: `Package ${shortCode} created via Excel import`,
                     ref_package_id: pkg.id,
                     user_id: userId
                   })
-                }
               }
             }
 
-            // Batch insert inventory movements
+            // Batch insert inventory movements (for audit trail)
             if (movementsToInsert.length > 0) {
-              await supabase
+              const { error: movementError } = await supabase
                 .from('inventory_movements')
                 .insert(movementsToInsert)
-            }
-
-            // Update inventory stock (batch update each unique item)
-            const uniqueItems = new Map<string, { item: any; totalDelta: number }>()
-            for (const update of inventoryUpdates) {
-              const existing = uniqueItems.get(update.itemId)
-              if (existing) {
-                existing.totalDelta += update.delta
-              } else {
-                uniqueItems.set(update.itemId, { item: update.item, totalDelta: update.delta })
+              
+              if (movementError) {
+                console.error('Error creating inventory movements:', movementError)
+                errors.push(`Warning: Failed to record inventory movements: ${movementError.message}`)
+                // Continue anyway - stock update is more important
               }
             }
 
-            // Apply inventory updates
-            for (const [itemId, { item, totalDelta }] of uniqueItems) {
-              await supabase
+            // CRITICAL: Update stock for all items that were used
+            if (stockDeductions.size > 0) {
+              const itemIdsToUpdate = Array.from(stockDeductions.keys())
+              
+              // Fetch CURRENT stock levels from database (not from stale state)
+              const { data: currentItems, error: fetchError } = await supabase
                 .from('inventory_items')
-                .update({ stock_on_hand: item.stock_on_hand + totalDelta })
-                .eq('id', itemId)
+                .select('id, stock_on_hand, name, sku')
+                .in('id', itemIdsToUpdate)
+
+              if (fetchError) {
+                console.error('❌ CRITICAL: Error fetching current stock levels:', fetchError)
+                errors.push(`CRITICAL: Error fetching stock levels: ${fetchError.message}`)
+                toast.error(`Failed to fetch stock levels. Stock may not be updated correctly!`)
+              } else if (currentItems && currentItems.length > 0) {
+                // Update stock for each item
+                const updatePromises = currentItems.map(async (item) => {
+                  const deduction = stockDeductions.get(item.id) || 0
+                  if (deduction > 0) {
+                    const newStock = item.stock_on_hand - deduction
+                    const finalStock = Math.max(0, newStock) // Prevent negative stock
+                    
+                    const { error: updateError } = await supabase
+                      .from('inventory_items')
+                      .update({ stock_on_hand: finalStock })
+                      .eq('id', item.id)
+
+                    if (updateError) {
+                      console.error(`❌ Error updating stock for ${item.name} (${item.sku}):`, updateError)
+                      errors.push(`Failed to update stock for ${item.name}: ${updateError.message}`)
+                      return false
+              } else {
+                      console.log(`✅ Stock updated: ${item.name} (${item.sku}) - Deducted ${deduction}, New stock: ${finalStock}`)
+                      return true
+                    }
+                  }
+                  return true
+                })
+
+                // Wait for all stock updates to complete
+                const updateResults = await Promise.all(updatePromises)
+                const successCount = updateResults.filter(r => r).length
+                const failCount = updateResults.filter(r => !r).length
+                
+                if (failCount > 0) {
+                  console.error(`❌ Failed to update stock for ${failCount} item(s)`)
+                  toast.error(`Warning: Failed to update stock for ${failCount} item(s). Check errors.`)
+                } else {
+                  console.log(`✅ Successfully updated stock for ${successCount} item(s)`)
+                }
+              } else {
+                console.error('❌ No items found when fetching stock levels')
+                errors.push('CRITICAL: No items found when updating stock')
+              }
+            } else {
+              console.warn('⚠️ No stock deductions to process (no items in packages?)')
             }
           }
         }
@@ -612,15 +433,19 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
         setBulkImportProgress({ current: Math.min(i + BATCH_SIZE, dataRows.length), total: dataRows.length })
       }
 
-      // Refresh inventory data
+      // Refresh inventory data to reflect stock changes
       await loadInventoryItems()
       window.dispatchEvent(new Event('inventory-updated'))
 
       setIsBulkImporting(false)
       
-      // Show results
+      // Show results with stock update confirmation
       if (successCount > 0) {
-        toast.success(`Successfully created ${successCount} package(s)!`, { duration: 5000 })
+        toast.success(
+          `✅ Successfully created ${successCount} package(s)! Stock has been deducted for all items.`, 
+          { duration: 6000 }
+        )
+        console.log(`✅ Excel Import Complete: ${successCount} packages created, stock deducted`)
       }
       if (errorCount > 0) {
         toast.error(`Failed to create ${errorCount} package(s). Check console for details.`, { duration: 5000 })
@@ -629,6 +454,14 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
       if (errors.length > 0 && errors.length <= 10) {
         errors.forEach(err => console.error(err))
       }
+      
+      // Log summary to console for debugging
+      console.log('📊 Import Summary:', {
+        totalRows: dataRows.length,
+        successCount,
+        errorCount,
+        stockUpdated: successCount > 0 ? 'Yes - Stock deducted for all created packages' : 'No packages created'
+      })
 
       // Reset file input and close modal
       event.target.value = ''
@@ -694,26 +527,13 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
 
   const generateBarcodeForPackage = async (pkg: any) => {
     try {
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Could not get canvas context')
-
-      // Generate QR code with package short_code
-      const qrCodeData = pkg.short_code || pkg.id
-      
-      await QRCode.toCanvas(canvas, qrCodeData, {
-        width: 500, // Increased resolution for better print quality
-        margin: 3, // Slightly more margin for better scanning
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        },
-        errorCorrectionLevel: 'M' // Better error correction for durability
-      })
-
-      const dataUrl = canvas.toDataURL('image/png')
+      const dataUrl = await generateQRCode(pkg.short_code)
+      if (dataUrl) {
       setBarcodeDataUrl(dataUrl)
-      console.log('QR code generated for:', qrCodeData)
+        console.log('QR code generated with tracking URL:', `${window.location.origin}/track/${pkg.short_code}`)
+      } else {
+        toast.error('Failed to generate QR code')
+      }
     } catch (error) {
       console.error('QR code generation error:', error)
       toast.error('Failed to generate QR code')
@@ -734,13 +554,59 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
       await generateBarcodeForPackage(createdPackage)
     }
 
-    // Preload logo as base64 for reliable printing
+    // Preload logo as base64 for reliable printing - CRITICAL FOR LOGO TO SHOW
     const logoBase64 = await loadLogoAsBase64()
-    if (logoBase64 && printRef.current) {
-      const logoImg = printRef.current.querySelector('.logo') as HTMLImageElement
+    console.log('[Print] Logo loaded:', logoBase64 ? 'YES (base64)' : 'NO, using URL')
+    
+    // Wait for DOM to be ready
+    await new Promise(resolve => setTimeout(resolve, 200))
+    
+    // Set logo src - try multiple times to ensure it works
+    const setLogo = () => {
+      if (printRef.current) {
+        const logoImg = printRef.current.querySelector('#label-logo-img') as HTMLImageElement || 
+                       printRef.current.querySelector('.logo') as HTMLImageElement
       if (logoImg) {
+          if (logoBase64) {
+            console.log('[Print] Setting logo src to base64')
         logoImg.src = logoBase64
+          } else {
+            console.log('[Print] Using logo URL fallback')
+            logoImg.src = getLogoUrl()
+          }
+          logoImg.style.display = 'block'
+          logoImg.style.visibility = 'visible'
+          logoImg.style.opacity = '1'
+          logoImg.style.maxHeight = '5mm'
+          logoImg.style.maxWidth = '90%'
+          
+          // Force logo to load
+          logoImg.onload = () => {
+            console.log('[Print] Logo loaded successfully')
+            logoImg.style.display = 'block'
+            logoImg.style.visibility = 'visible'
+          }
+          logoImg.onerror = () => {
+            console.error('[Print] Logo failed to load')
+            if (logoBase64) {
+              logoImg.src = logoBase64
+            } else {
+              logoImg.src = getLogoUrl()
+            }
+          }
+          return true
+        } else {
+          console.error('[Print] Logo img element not found in DOM!')
+          return false
+        }
       }
+      return false
+    }
+    
+    // Try setting logo multiple times
+    if (!setLogo()) {
+      setTimeout(() => setLogo(), 100)
+      setTimeout(() => setLogo(), 300)
     }
 
     // Wait for barcode to be in DOM
@@ -900,7 +766,7 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
           created_by: userId,
           origin: 'Main Office',
           destination_branch_id: branchId,
-          contents_note: `To: ${formData.name} ${formData.surname}${formData.company ? ` (${formData.company})` : ''}\nItems: ${formData.items.map(i => `${i.product} x${i.quantity}`).join(', ')}`,
+          contents_note: `To: ${formData.name} ${formData.surname}${formData.company ? ` | ${formData.company}` : ''}\n${formData.address}\nItems: ${formData.items.map(i => `${i.product} x${i.quantity}`).join(', ')}`,
           status: 'created',
           current_location: 'Main Office',
           symbology: 'code128',
@@ -1370,14 +1236,11 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
             <div className="label-left-section">
               <div className="logo-section">
                 <img 
-                  src={getLogoUrl()} 
+                  src="" 
                   alt="Sigma Logo" 
                   className="logo" 
-                  onError={(e) => {
-                    const target = e.currentTarget as HTMLImageElement
-                    console.error('[Logo] Failed to load from Supabase Storage in print label')
-                    target.style.display = 'none'
-                  }}
+                  id="label-logo-img"
+                  style={{ display: 'block', visibility: 'visible', opacity: 1 }}
                 />
                 <div className="logo-separator"></div>
               </div>
@@ -1409,20 +1272,41 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
 
       {/* Print Styles */}
       <style>{`
-        /* Hide printable label on screen */
+        /* TEMPORARY: Show label on screen to see changes - Remove this after testing! */
         #print-label {
+          position: fixed !important;
+          left: 50% !important;
+          top: 50% !important;
+          transform: translate(-50%, -50%) scale(2.5) !important;
+          width: 58mm !important;
+          min-height: 40mm !important;
+          z-index: 99999 !important;
+          background: white !important;
+          border: 4px solid red !important;
+          box-shadow: 0 0 30px rgba(0,0,0,0.7) !important;
+        }
+        
+        /* Normal behavior - uncomment this to hide label on screen */
+        /* #print-label {
           position: absolute;
           left: -9999px;
           top: -9999px;
-          width: 50mm;
-          min-height: 30mm;
-        }
+          width: 58mm;
+          min-height: 40mm;
+        } */
 
-        /* Print styles - 50mm x 30mm thermal label (landscape/horizontal) */
+        /* Print styles - 58mm x 40mm thermal label - SINGLE PAGE ONLY */
         @media print {
           /* Force hide everything */
+          * {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
           body * {
             visibility: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           /* Show only the label and its children */
@@ -1432,223 +1316,271 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
           }
 
           #print-label {
-            position: absolute !important;
+            position: fixed !important;
             left: 0 !important;
             top: 0 !important;
-            width: 50mm !important;
-            height: 30mm !important;
+            width: 58mm !important;
+            height: 40mm !important;
+            max-width: 58mm !important;
+            max-height: 40mm !important;
             background: white !important;
             display: block !important;
             margin: 0 !important;
             padding: 0 !important;
             z-index: 9999 !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            page-break-before: avoid !important;
           }
 
-          /* 50mm x 30mm horizontal thermal label */
+          /* 58mm x 40mm thermal label - SINGLE PAGE ONLY */
           @page {
-            size: 50mm 30mm landscape;
-            margin: 0;
+            size: 58mm 40mm;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           html, body {
-            width: 50mm !important;
-            min-height: 30mm !important;
+            width: 58mm !important;
+            height: 40mm !important;
+            max-width: 58mm !important;
+            max-height: 40mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: visible !important;
+            overflow: hidden !important;
             background: white !important;
+            page-break-after: avoid !important;
+            page-break-before: avoid !important;
           }
 
-          /* Main Label Container - Modern Sleek Design */
+          /* Main Label Container - SIMPLE FUNCTIONAL DESIGN */
           .shipping-label {
-            width: 50mm !important;
-            min-height: 30mm !important;
-            padding: 0 !important;
+            width: 58mm !important;
+            height: 40mm !important;
+            max-width: 58mm !important;
+            max-height: 40mm !important;
+            padding: 0.5mm !important;
             box-sizing: border-box !important;
             display: flex !important;
-            flex-direction: row !important;
+            flex-direction: column !important;
             margin: 0 !important;
-            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+            background: #ffffff !important;
             color: #000 !important;
             position: relative !important;
-            border: 0.5mm solid #e5e7eb !important;
-            overflow: visible !important;
+            border: 0.2mm solid #000000 !important;
+            overflow: hidden !important;
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
           }
 
-          /* Left Section - Logo, Tracking, Recipient */
+          /* Left Section - Logo & Content */
           .label-left-section {
-            flex: 1.5 !important;
             display: flex !important;
             flex-direction: column !important;
-            padding: 1mm 1.5mm 1.5mm 1.5mm !important;
-            justify-content: flex-start !important;
-            gap: 0.5mm !important;
-            min-height: 0 !important;
-            flex-shrink: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            flex: 1 !important;
+            min-width: 0 !important;
+            height: 100% !important;
           }
 
-          /* Logo Section */
+          /* Logo Section - Simple Top Bar - ALWAYS VISIBLE */
           .logo-section {
-            margin-bottom: 0.2mm !important;
+            background: #000000 !important;
+            padding: 0.8mm !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
             flex-shrink: 0 !important;
+            height: 6mm !important;
+            max-height: 6mm !important;
+            min-height: 6mm !important;
+            visibility: visible !important;
+            opacity: 1 !important;
           }
 
           .logo {
             max-height: 5mm !important;
-            max-width: 100% !important;
+            max-width: 90% !important;
             width: auto !important;
             height: auto !important;
             display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
             object-fit: contain !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
-            margin-bottom: 0.2mm !important;
+            filter: brightness(0) invert(1) !important;
+          }
+          
+          .logo[src=""],
+          .logo:not([src]) {
+            display: none !important;
           }
 
           .logo-separator {
-            height: 0.3mm !important;
-            background: #dc2626 !important;
-            width: 100% !important;
-            margin-top: 0.4mm !important;
+            display: none !important;
           }
 
-          /* Company Section - Before tracking */
-          .company-section {
-            margin-bottom: 0.4mm !important;
-          }
-
-          /* Company Name - Secondary */
-          .company-name {
-            font-weight: 600 !important;
-            font-size: 7pt !important;
-            color: #111827 !important;
-            line-height: 1.2 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.1px !important;
-            font-family: 'Arial', sans-serif !important;
-            word-wrap: break-word !important;
-            overflow-wrap: break-word !important;
-            white-space: normal !important;
-            margin-bottom: 0.5mm !important;
-          }
-
-          /* Tracking Code Section - Smallest */
+          /* Tracking Code Section - Simple */
           .tracking-code-section {
-            margin-bottom: 0.2mm !important;
+            padding: 0.5mm !important;
+            background: #ffffff !important;
+            border-bottom: 0.2mm solid #000000 !important;
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
             flex-shrink: 0 !important;
+            gap: 0.5mm !important;
+            min-height: 3mm !important;
           }
 
           .tracking-label {
-            font-size: 1.8pt !important;
-            font-weight: 600 !important;
-            color: #111827 !important;
+            font-size: 1.5pt !important;
+            font-weight: 700 !important;
+            color: #000000 !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.2px !important;
-            margin-bottom: 0.15mm !important;
             font-family: 'Arial', sans-serif !important;
+            margin: 0 !important;
+            white-space: nowrap !important;
+            line-height: 1.2 !important;
           }
 
           .tracking-code {
-            font-size: 2.5pt !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.5px !important;
-            color: #111827 !important;
-            line-height: 1.0 !important;
+            font-size: 5pt !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.8px !important;
+            color: #000000 !important;
+            line-height: 1.3 !important;
             text-transform: uppercase !important;
             font-family: 'Courier New', 'Monaco', monospace !important;
-            padding: 0.2mm 0.3mm !important;
-            border-radius: 0.6mm !important;
-            border: 0.2mm solid #e5e7eb !important;
-            background: #f9fafb !important;
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
             display: inline-block !important;
+            flex: 1 !important;
+            text-align: right !important;
           }
 
-          /* Recipient Section - Primary content block */
+          /* Main Content Section - Recipient Info */
           .recipient-section {
             display: flex !important;
             flex-direction: column !important;
-            justify-content: flex-start !important;
+            padding: 1mm !important;
             gap: 0.5mm !important;
-            margin-top: 0.3mm !important;
-            flex: 1 1 auto !important;
+            flex: 1 !important;
+            justify-content: flex-start !important;
+            background: #ffffff !important;
+            position: relative !important;
             min-height: 0 !important;
+            overflow: hidden !important;
           }
 
-          /* Recipient Name - PRIMARY FOCAL POINT - Largest element on label */
+          /* Beneficiary Name - BIGGEST & BOLDEST */
           .recipient-name {
-            font-weight: 900 !important;
-            font-size: 14pt !important;
+            font-weight: 800 !important;
+            font-size: 10pt !important;
             margin: 0 !important;
-            margin-bottom: 0.5mm !important;
             padding: 0 !important;
-            color: #111827 !important;
-            line-height: 1.2 !important;
+            color: #000000 !important;
+            line-height: 1.3 !important;
             text-transform: uppercase !important;
             letter-spacing: 0.3px !important;
-            font-family: 'Arial Black', 'Arial', sans-serif !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
             word-wrap: break-word !important;
             overflow-wrap: break-word !important;
             white-space: normal !important;
             flex-shrink: 0 !important;
           }
 
-          /* Address - Tertiary plain text */
+          /* Company Name - MEDIUM */
+          .company-name {
+            font-weight: 600 !important;
+            font-size: 7pt !important;
+            color: #000000 !important;
+            line-height: 1.3 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.2px !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          .company-name::before {
+            display: none !important;
+          }
+
+          /* Address - READABLE */
           .address-text {
             font-size: 5pt !important;
-            color: #374151 !important;
+            color: #000000 !important;
             line-height: 1.3 !important;
             word-wrap: break-word !important;
             overflow-wrap: break-word !important;
             white-space: normal !important;
             font-weight: 400 !important;
             font-family: 'Arial', sans-serif !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            letter-spacing: 0.1px !important;
           }
 
-          /* Right Section - Large QR Code */
+          .address-text::before {
+            display: none !important;
+          }
+
+          /* QR Code Section - BIG & READABLE */
           .label-right-section {
-            width: 18mm !important;
+            position: absolute !important;
+            right: 0.5mm !important;
+            bottom: 0.5mm !important;
+            width: 16mm !important;
+            height: 16mm !important;
+            max-width: 16mm !important;
+            max-height: 16mm !important;
             display: flex !important;
-            flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%) !important;
-            border-left: 0.5mm dashed #d1d5db !important;
-            padding: 1.5mm !important;
+            background: #ffffff !important;
+            border: 0.2mm solid #000000 !important;
+            padding: 0.5mm !important;
             box-sizing: border-box !important;
-            flex-shrink: 0 !important;
-            align-self: stretch !important;
           }
 
-          /* QR Code - Large and Prominent */
+          /* QR Code - Clear and scannable */
           .qr-code {
-            width: 18mm !important;
-            height: 18mm !important;
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
             display: block !important;
-            flex-shrink: 0 !important;
             object-fit: contain !important;
-            border: 0.5mm solid #111827 !important;
-            padding: 1mm !important;
-            background: white !important;
-            border-radius: 1mm !important;
-            box-shadow: 0 0.5mm 1mm rgba(0, 0, 0, 0.1) !important;
+            border: none !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
           }
 
-
-          /* Items List - Compact and readable */
+          /* Items List - Very Compact */
           .items-list {
-            font-size: 3.5pt !important;
-            color: #111827 !important;
-            line-height: 1.3 !important;
+            font-size: 2.2pt !important;
+            color: #000000 !important;
+            line-height: 1.2 !important;
             font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-weight: 500 !important;
+            font-weight: 400 !important;
           }
 
           .items-list div {
-            margin-bottom: 0.2mm !important;
-            line-height: 1.3 !important;
-            padding: 0.2mm 0 !important;
+            margin-bottom: 0.05mm !important;
+            line-height: 1.2 !important;
+            padding: 0 !important;
           }
         }
       `}</style>
@@ -1808,11 +1740,96 @@ function AdminModal({ onClose }: { onClose: () => void }) {
   const [branches, setBranches] = useState<any[]>([])
   const [editingPackage, setEditingPackage] = useState<any | null>(null)
   const [packageFormData, setPackageFormData] = useState({
-    contents_note: '',
+    recipient_name: '',
+    recipient_company: '',
+    delivery_address: '',
+    contents: '',
     destination_branch_id: '',
     current_location: '',
     status: 'created' as any
   })
+
+  // Helper function to parse contents_note into separate fields
+  const parseContentsNote = (contentsNote: string) => {
+    const lines = contentsNote.split('\n').filter(l => l.trim())
+    let recipientName = ''
+    let recipientCompany = ''
+    let deliveryAddress = ''
+    let contents = ''
+
+    for (const line of lines) {
+      if (line.startsWith('To: ')) {
+        const toLine = line.substring(4).trim()
+        // Parse "Name Surname | Company" or "Name Surname (Company)"
+        const pipeMatch = toLine.match(/^(.+?)\s*\|\s*(.+)$/)
+        const parenMatch = toLine.match(/^(.+?)\s+\((.+)\)\s*$/)
+        
+        if (pipeMatch) {
+          // Format: "Name | Company"
+          const namePart = pipeMatch[1].trim()
+          const nameParts = namePart.split(/\s+/)
+          recipientName = nameParts[0] || ''
+          if (nameParts.length > 1) {
+            recipientName += ' ' + nameParts.slice(1).join(' ')
+          }
+          recipientCompany = pipeMatch[2].trim()
+        } else if (parenMatch) {
+          // Format: "Name (Company)"
+          const namePart = parenMatch[1].trim()
+          const nameParts = namePart.split(/\s+/)
+          recipientName = nameParts[0] || ''
+          if (nameParts.length > 1) {
+            recipientName += ' ' + nameParts.slice(1).join(' ')
+          }
+          recipientCompany = parenMatch[2].trim()
+        } else {
+          // Just name, no company
+          const nameParts = toLine.split(/\s+/)
+          recipientName = nameParts[0] || ''
+          if (nameParts.length > 1) {
+            recipientName += ' ' + nameParts.slice(1).join(' ')
+          }
+        }
+      } else if (line.startsWith('Items: ')) {
+        contents = line.substring(7).trim()
+      } else if (line.trim() && !line.startsWith('To: ') && !line.startsWith('Items: ')) {
+        // This is likely the address line
+        if (!deliveryAddress) {
+          deliveryAddress = line.trim()
+        } else {
+          deliveryAddress += '\n' + line.trim()
+        }
+      }
+    }
+
+    return { recipientName, recipientCompany, deliveryAddress, contents }
+  }
+
+  // Helper function to format contents_note from separate fields
+  const formatContentsNote = (recipientName: string, recipientCompany: string, deliveryAddress: string, contents: string) => {
+    const parts: string[] = []
+    
+    if (recipientName || recipientCompany) {
+      let toLine = 'To: '
+      if (recipientName) {
+        toLine += recipientName.trim()
+      }
+      if (recipientCompany) {
+        toLine += ` | ${recipientCompany.trim()}`
+      }
+      parts.push(toLine)
+    }
+    
+    if (deliveryAddress) {
+      parts.push(deliveryAddress.trim())
+    }
+    
+    if (contents) {
+      parts.push(`Items: ${contents.trim()}`)
+    }
+    
+    return parts.join('\n')
+  }
   const [packageSearchTerm, setPackageSearchTerm] = useState('')
   
   // Products state
@@ -1855,7 +1872,23 @@ function AdminModal({ onClose }: { onClose: () => void }) {
         .limit(100)
       
       if (error) throw error
-      setPackages(data || [])
+      
+      // Sort packages: non-printed first (by created_at desc), then printed (by created_at desc)
+      const sortedPackages = (data || []).sort((a, b) => {
+        const aIsPrinted = a.status === 'printed'
+        const bIsPrinted = b.status === 'printed'
+        
+        // If one is printed and the other isn't, non-printed comes first
+        if (aIsPrinted && !bIsPrinted) return 1
+        if (!aIsPrinted && bIsPrinted) return -1
+        
+        // If both have the same printed status, sort by created_at descending
+        const aDate = new Date(a.created_at).getTime()
+        const bDate = new Date(b.created_at).getTime()
+        return bDate - aDate
+      })
+      
+      setPackages(sortedPackages)
     } catch (error) {
       console.error('Error loading packages:', error)
       toast.error('Failed to load packages')
@@ -1911,12 +1944,99 @@ function AdminModal({ onClose }: { onClose: () => void }) {
 
   const handleEditPackage = (pkg: any) => {
     setEditingPackage(pkg)
+    const parsed = parseContentsNote(pkg.contents_note || '')
     setPackageFormData({
-      contents_note: pkg.contents_note || '',
+      recipient_name: parsed.recipientName,
+      recipient_company: parsed.recipientCompany,
+      delivery_address: parsed.deliveryAddress,
+      contents: parsed.contents,
       destination_branch_id: pkg.destination_branch_id || '',
       current_location: pkg.current_location || '',
       status: pkg.status || 'created'
     })
+  }
+
+  const handleQuickStatusChange = async (pkg: any, newStatus: string) => {
+    if (!pkg || !pkg.id) {
+      console.error('[Admin] Invalid package data:', pkg)
+      toast.error('Invalid package data')
+      return
+    }
+
+    if (!currentUser || !currentUser.id) {
+      console.error('[Admin] User not authenticated:', currentUser)
+      toast.error('User not authenticated')
+      return
+    }
+
+    if (pkg.status === newStatus) {
+      console.log('[Admin] Status unchanged, skipping update')
+      return // No change needed
+    }
+
+    const oldStatus = pkg.status
+    
+    // Optimistically update UI immediately
+    setPackages(prevPackages => 
+      prevPackages.map(p => 
+        p.id === pkg.id ? { ...p, status: newStatus } : p
+      )
+    )
+
+    try {
+      console.log(`[Admin] Changing status for package ${pkg.short_code} (${pkg.id}) from "${oldStatus}" to "${newStatus}"`)
+
+      // Update package status in database
+      const { data: updateData, error: updateError } = await supabase
+        .from('packages')
+        .update({ status: newStatus })
+        .eq('id', pkg.id)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error('[Admin] Status update error:', updateError)
+        // Revert optimistic update
+        setPackages(prevPackages => 
+          prevPackages.map(p => 
+            p.id === pkg.id ? { ...p, status: oldStatus } : p
+          )
+        )
+        throw updateError
+      }
+
+      console.log('[Admin] Status updated successfully:', updateData)
+
+      // Record status history
+      const { error: historyError } = await supabase
+        .from('package_status_history')
+        .insert({
+          package_id: pkg.id,
+          from_status: oldStatus,
+          to_status: newStatus,
+          location: pkg.current_location || 'Admin Update',
+          scanned_by: currentUser.id,
+          scanned_at: new Date().toISOString(),
+          note: 'Status updated by administrator'
+        })
+
+      if (historyError) {
+        console.warn('[Admin] Failed to record status history (non-critical):', historyError)
+        // Don't fail the whole operation if history recording fails
+      } else {
+        console.log('[Admin] Status history recorded successfully')
+      }
+
+      toast.success(`Package ${pkg.short_code} status updated to ${newStatus.replace(/_/g, ' ')}`)
+      
+      // Reload packages to ensure consistency
+      setTimeout(() => {
+        loadPackages()
+      }, 500)
+    } catch (error: any) {
+      console.error('[Admin] Error updating package status:', error)
+      toast.error(`Failed to update package status: ${error?.message || error?.code || 'Unknown error'}`)
+    }
   }
 
   const handleSavePackage = async () => {
@@ -1926,8 +2046,16 @@ function AdminModal({ onClose }: { onClose: () => void }) {
       const oldStatus = editingPackage.status
       const newStatus = packageFormData.status
 
+      // Format contents_note from separate fields
+      const contentsNote = formatContentsNote(
+        packageFormData.recipient_name,
+        packageFormData.recipient_company,
+        packageFormData.delivery_address,
+        packageFormData.contents
+      )
+
       const updateData: any = {
-        contents_note: packageFormData.contents_note.trim(),
+        contents_note: contentsNote,
         destination_branch_id: packageFormData.destination_branch_id || null,
         current_location: packageFormData.current_location.trim(),
         status: newStatus
@@ -2216,6 +2344,12 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{t('admin.packageManagement')}</h3>
                   <p className="text-sm text-gray-600">{t('admin.viewModifyPackage')}</p>
+                  <div className="mt-2 flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-xs font-medium text-blue-800">💡 Quick Tip: Click the status dropdown on any package to change its status instantly!</span>
+                  </div>
                 </div>
               </div>
 
@@ -2238,7 +2372,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                     <button
                       onClick={() => {
                         setEditingPackage(null)
-                        setPackageFormData({ contents_note: '', destination_branch_id: '', current_location: '', status: 'created' })
+                        setPackageFormData({ recipient_name: '', recipient_company: '', delivery_address: '', contents: '', destination_branch_id: '', current_location: '', status: 'created' })
                       }}
                       className="p-2 text-gray-400 hover:text-gray-600"
                     >
@@ -2254,6 +2388,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                         onChange={(e) => setPackageFormData({ ...packageFormData, status: e.target.value })}
                         className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                       >
+                        <option value="just_created">{t('scanner.statuses.just_created')}</option>
                         <option value="created">{t('scanner.statuses.created')}</option>
                         <option value="queued_for_print">{t('scanner.statuses.queued_for_print')}</option>
                         <option value="printed">{t('scanner.statuses.printed')}</option>
@@ -2264,6 +2399,51 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                         <option value="returned">{t('scanner.statuses.returned')}</option>
                         <option value="canceled">{t('scanner.statuses.canceled')}</option>
                       </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Recipient Name</label>
+                        <input
+                          type="text"
+                          value={packageFormData.recipient_name}
+                          onChange={(e) => setPackageFormData({ ...packageFormData, recipient_name: e.target.value })}
+                          className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                          placeholder="Full name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Company</label>
+                        <input
+                          type="text"
+                          value={packageFormData.recipient_company}
+                          onChange={(e) => setPackageFormData({ ...packageFormData, recipient_company: e.target.value })}
+                          className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                          placeholder="Company name (optional)"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Delivery Address</label>
+                      <textarea
+                        value={packageFormData.delivery_address}
+                        onChange={(e) => setPackageFormData({ ...packageFormData, delivery_address: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 resize-none"
+                        rows={2}
+                        placeholder="Street address, city, postal code"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Contents (Items Only)</label>
+                      <textarea
+                        value={packageFormData.contents}
+                        onChange={(e) => setPackageFormData({ ...packageFormData, contents: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 resize-none"
+                        rows={3}
+                        placeholder="e.g., Limoncello x1, Electronics x2"
+                      />
                     </div>
 
                     <div>
@@ -2291,17 +2471,6 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                           </option>
                         ))}
                       </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('admin.contentsProducts')}</label>
-                      <textarea
-                        value={packageFormData.contents_note}
-                        onChange={(e) => setPackageFormData({ ...packageFormData, contents_note: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 resize-none"
-                        rows={4}
-                        placeholder={t('admin.contentsPlaceholder')}
-                      />
                     </div>
 
                     <div className="flex space-x-3 pt-4">
@@ -2342,35 +2511,104 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                     <div key={pkg.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-200 hover:shadow-md hover:border-red-200 transition-all">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
+                          <div className="flex items-center justify-between mb-4">
                             <span className="font-mono font-bold text-lg text-gray-900">{pkg.short_code}</span>
-                            <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                              pkg.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                              pkg.status === 'canceled' ? 'bg-red-100 text-red-800' :
-                              'bg-blue-100 text-blue-800'
-                            }`}>
-                              {pkg.status.replace('_', ' ')}
-                            </span>
+                            <div className="flex items-center space-x-2">
+                              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-xs text-gray-500 font-medium">Change Status</span>
+                            </div>
                           </div>
                           
+                          {/* Status Change - Very Prominent */}
+                          <div className="mb-4">
+                            <label className="flex items-center space-x-2 text-sm font-bold text-gray-700 mb-2">
+                              <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              <span>Package Status:</span>
+                            </label>
+                            <select
+                              value={pkg.status || 'created'}
+                              onChange={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                const newStatus = e.target.value
+                                console.log('[Admin] Status change triggered:', { packageId: pkg.id, shortCode: pkg.short_code, oldStatus: pkg.status, newStatus })
+                                handleQuickStatusChange(pkg, newStatus)
+                              }}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                              className={`w-full px-4 py-3 text-sm font-bold rounded-lg border-2 cursor-pointer focus:ring-2 focus:ring-red-500 focus:border-red-500 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.02] ${
+                                pkg.status === 'just_created' ? 'bg-emerald-100 text-emerald-900 border-emerald-400 hover:bg-emerald-200' :
+                                pkg.status === 'delivered' ? 'bg-green-100 text-green-900 border-green-400 hover:bg-green-200' :
+                                pkg.status === 'canceled' ? 'bg-red-100 text-red-900 border-red-400 hover:bg-red-200' :
+                                pkg.status === 'in_transit' ? 'bg-yellow-100 text-yellow-900 border-yellow-400 hover:bg-yellow-200' :
+                                pkg.status === 'at_branch' ? 'bg-purple-100 text-purple-900 border-purple-400 hover:bg-purple-200' :
+                                pkg.status === 'printed' ? 'bg-indigo-100 text-indigo-900 border-indigo-400 hover:bg-indigo-200' :
+                                pkg.status === 'queued_for_print' ? 'bg-orange-100 text-orange-900 border-orange-400 hover:bg-orange-200' :
+                                pkg.status === 'handed_over' ? 'bg-cyan-100 text-cyan-900 border-cyan-400 hover:bg-cyan-200' :
+                                pkg.status === 'returned' ? 'bg-pink-100 text-pink-900 border-pink-400 hover:bg-pink-200' :
+                                'bg-blue-100 text-blue-900 border-blue-400 hover:bg-blue-200'
+                              }`}
+                              title="Click to change package status - Select a new status from the dropdown"
+                            >
+                              <option value="just_created">{t('scanner.statuses.just_created')}</option>
+                              <option value="created">{t('scanner.statuses.created')}</option>
+                              <option value="queued_for_print">{t('scanner.statuses.queued_for_print')}</option>
+                              <option value="printed">{t('scanner.statuses.printed')}</option>
+                              <option value="handed_over">{t('scanner.statuses.handed_over')}</option>
+                              <option value="in_transit">{t('scanner.statuses.in_transit')}</option>
+                              <option value="at_branch">{t('scanner.statuses.at_branch')}</option>
+                              <option value="delivered">{t('scanner.statuses.delivered')}</option>
+                              <option value="returned">{t('scanner.statuses.returned')}</option>
+                              <option value="canceled">{t('scanner.statuses.canceled')}</option>
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1.5 flex items-center space-x-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>Click the dropdown above to change status</span>
+                            </p>
+                          </div>
+                          
+                          {(() => {
+                            const parsed = parseContentsNote(pkg.contents_note || '')
+                            return (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-3">
+                                {parsed.recipientName && (
                             <div>
-                              <span className="text-gray-500 font-medium">Contents:</span>
-                              <p className="text-gray-900 mt-0.5">{pkg.contents_note || <span className="italic text-gray-400">Not specified</span>}</p>
+                                    <span className="text-gray-500 font-medium">{t('packages.recipient')}:</span>
+                                    <p className="text-gray-900 mt-0.5 font-semibold">
+                                      {parsed.recipientName}
+                                      {parsed.recipientCompany && ` | ${parsed.recipientCompany}`}
+                                    </p>
                             </div>
+                                )}
+                                {parsed.deliveryAddress && (
                             <div>
-                              <span className="text-gray-500 font-medium">Destination:</span>
-                              <p className="text-gray-900 mt-0.5">{pkg.destination_branch?.name || <span className="italic text-gray-400">Not set</span>}</p>
+                                    <span className="text-gray-500 font-medium">{t('packages.deliveryAddress')}:</span>
+                                    <p className="text-gray-900 mt-0.5 whitespace-pre-line">{parsed.deliveryAddress}</p>
                             </div>
+                                )}
+                                {parsed.contents && (
                             <div>
-                              <span className="text-gray-500 font-medium">Location:</span>
+                                    <span className="text-gray-500 font-medium">{t('packages.contents')}:</span>
+                                    <p className="text-gray-900 mt-0.5">{parsed.contents}</p>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-gray-500 font-medium">{t('scanner.currentLocation')}:</span>
                               <p className="text-gray-900 mt-0.5">{pkg.current_location || <span className="italic text-gray-400">Not set</span>}</p>
                             </div>
                             <div>
-                              <span className="text-gray-500 font-medium">Created By:</span>
+                                  <span className="text-gray-500 font-medium">{t('scanner.createdBy')}:</span>
                               <p className="text-gray-900 mt-0.5 font-semibold">{pkg.created_by_user?.name || <span className="italic text-gray-400">Unknown</span>}</p>
                             </div>
                           </div>
+                            )
+                          })()}
                         </div>
                         
                         <div className="ml-6 flex flex-col space-y-2">
@@ -2748,8 +2986,10 @@ function InventoryModal({ onClose }: { onClose: () => void }) {
 // Packages Modal Component
 function PackagesModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
+  const { user: currentUser } = useAuth()
   const [packages, setPackages] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedPackage, setSelectedPackage] = useState<any>(null)
   const [logo, setLogo] = useState<string | null>(null)
   const [isPrinting, setIsPrinting] = useState(false)
@@ -2762,13 +3002,18 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     setLogo(getLogoUrl())
   }, [])
 
-  const loadPackages = async (search: string = '') => {
+  const loadPackages = async (search: string = '', status: string = 'all') => {
     setIsLoading(true)
     try {
       let query = supabase
         .from('packages')
         .select('*')
         .order('created_at', { ascending: false })
+
+      // Filter by status if not 'all'
+      if (status !== 'all') {
+        query = query.eq('status', status)
+      }
 
       // If there's a search term, search across multiple fields
       if (search.trim()) {
@@ -2785,7 +3030,23 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       const { data, error } = await query
       
       if (error) throw error
-      setPackages(data || [])
+      
+      // Sort packages: non-printed first (by created_at desc), then printed (by created_at desc)
+      const sortedPackages = (data || []).sort((a, b) => {
+        const aIsPrinted = a.status === 'printed'
+        const bIsPrinted = b.status === 'printed'
+        
+        // If one is printed and the other isn't, non-printed comes first
+        if (aIsPrinted && !bIsPrinted) return 1
+        if (!aIsPrinted && bIsPrinted) return -1
+        
+        // If both have the same printed status, sort by created_at descending
+        const aDate = new Date(a.created_at).getTime()
+        const bDate = new Date(b.created_at).getTime()
+        return bDate - aDate
+      })
+      
+      setPackages(sortedPackages)
     } catch (error) {
       console.error('Error loading packages:', error)
       toast.error('Failed to load packages')
@@ -2795,8 +3056,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   }
 
   useEffect(() => {
-    loadPackages()
-  }, [])
+    loadPackages('', statusFilter)
+  }, [statusFilter])
 
   // Debounced search - search as user types
   useEffect(() => {
@@ -2807,7 +3068,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
 
     // Set new timeout for search
     searchTimeoutRef.current = setTimeout(() => {
-      loadPackages(searchTerm)
+      loadPackages(searchTerm, statusFilter)
     }, 300) // Wait 300ms after user stops typing
 
     // Cleanup
@@ -2816,13 +3077,14 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         clearTimeout(searchTimeoutRef.current)
       }
     }
-  }, [searchTerm])
+  }, [searchTerm, statusFilter])
 
   // Packages are already filtered server-side, so no client-side filtering needed
   const filteredPackages = packages
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
+      'just_created': 'bg-emerald-100 text-emerald-800',
       'created': 'bg-blue-100 text-blue-800',
       'queued_for_print': 'bg-yellow-100 text-yellow-800',
       'printed': 'bg-purple-100 text-purple-800',
@@ -2836,6 +3098,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
+
   const parsePackageContents = (contentsNote: string) => {
     const lines = contentsNote.split('\n')
     let name = ''
@@ -2847,17 +3110,41 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     for (const line of lines) {
       if (line.startsWith('To: ')) {
         const toLine = line.substring(4).trim()
-        const nameMatch = toLine.match(/^(.+?)(?:\s+\((.+)\))?$/)
-        if (nameMatch) {
-          const fullName = nameMatch[1].trim()
-          const nameParts = fullName.split(' ')
+        // Handle both "Name | Company" and "Name (Company)" formats
+        const pipeMatch = toLine.match(/^(.+?)\s*\|\s*(.+)$/)
+        const parenMatch = toLine.match(/^(.+?)\s+\((.+)\)\s*$/)
+        
+        if (pipeMatch) {
+          // Format: "Name | Company"
+          const namePart = pipeMatch[1].trim()
+          const nameParts = namePart.split(/\s+/)
+          if (nameParts.length >= 2) {
+            name = nameParts[0]
+            surname = nameParts.slice(1).join(' ')
+          } else {
+            name = namePart
+          }
+          company = pipeMatch[2].trim()
+        } else if (parenMatch) {
+          // Format: "Name (Company)"
+          const fullName = parenMatch[1].trim()
+          const nameParts = fullName.split(/\s+/)
           if (nameParts.length >= 2) {
             name = nameParts[0]
             surname = nameParts.slice(1).join(' ')
           } else {
             name = fullName
           }
-          company = nameMatch[2] || ''
+          company = parenMatch[2].trim()
+        } else {
+          // Just name, no company
+          const nameParts = toLine.split(/\s+/)
+          if (nameParts.length >= 2) {
+            name = nameParts[0]
+            surname = nameParts.slice(1).join(' ')
+          } else {
+            name = toLine
+          }
         }
       } else if (line.startsWith('Items: ')) {
         const itemsLine = line.substring(7).trim()
@@ -2885,22 +3172,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   }
 
   const generateQRCode = async (shortCode: string): Promise<string | null> => {
-    try {
-      const canvas = document.createElement('canvas')
-      await QRCode.toCanvas(canvas, shortCode, {
-        width: 500, // Increased resolution for better print quality
-        margin: 3, // Slightly more margin for better scanning
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        },
-        errorCorrectionLevel: 'M' // Better error correction for durability
-      })
-      return canvas.toDataURL('image/png')
-    } catch (error) {
-      console.error('QR code generation error:', error)
-      return null
-    }
+    // generateQRCode is now imported from utils/qrCode.ts
+    return await generateQRCode(shortCode)
   }
 
   const printPackage = async (pkg: any, e?: React.MouseEvent) => {
@@ -2924,12 +3197,13 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
 
       const logoBase64 = await loadLogoAsBase64()
       const logoSrc = logoBase64 || getLogoUrl()
+      console.log('[PackagesModal Print] Logo src:', logoSrc ? 'SET' : 'MISSING', logoBase64 ? '(base64)' : '(URL)')
       
       const printLabelHTML = `
         <div class="shipping-label">
           <div class="label-left-section">
             <div class="logo-section">
-              <img src="${logoSrc}" alt="Sigma Logo" class="logo" onerror="this.style.display='none'" />
+              <img src="${logoSrc}" alt="Sigma Logo" class="logo" style="display: block !important; visibility: visible !important; opacity: 1 !important; max-height: 5mm !important; max-width: 90% !important;" onerror="console.error('Logo failed to load'); this.style.display='block'; this.style.visibility='visible';" />
               <div class="logo-separator"></div>
             </div>
             
@@ -2960,6 +3234,20 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       }
       printContainer.innerHTML = printLabelHTML
 
+      // CRITICAL: Ensure logo is visible and loaded
+      const logoImg = printContainer.querySelector('.logo') as HTMLImageElement
+      if (logoImg) {
+        logoImg.style.display = 'block'
+        logoImg.style.visibility = 'visible'
+        logoImg.style.opacity = '1'
+        if (logoBase64 && logoImg.src !== logoBase64) {
+          logoImg.src = logoBase64
+        }
+        console.log('[PackagesModal Print] Logo element found, src:', logoImg.src.substring(0, 50))
+      } else {
+        console.error('[PackagesModal Print] Logo element NOT found!')
+      }
+
       const images = printContainer.querySelectorAll('img')
       let loadedCount = 0
       const totalImages = images.length
@@ -2969,6 +3257,12 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         loadedCount++
         if (loadedCount === totalImages && !hasTriggered) {
           hasTriggered = true
+          // Double-check logo is visible before printing
+          if (logoImg) {
+            logoImg.style.display = 'block'
+            logoImg.style.visibility = 'visible'
+            logoImg.style.opacity = '1'
+          }
           triggerPrint()
         }
       }
@@ -2979,7 +3273,16 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             checkAllLoaded()
           } else {
             img.addEventListener('load', checkAllLoaded, { once: true })
-            img.addEventListener('error', checkAllLoaded, { once: true })
+            img.addEventListener('error', () => {
+              // Don't hide logo on error, try base64 if available
+              if (img === logoImg && logoBase64) {
+                const imgElement = img as HTMLImageElement
+                imgElement.src = logoBase64
+                imgElement.style.display = 'block'
+                imgElement.style.visibility = 'visible'
+              }
+              checkAllLoaded()
+            }, { once: true })
           }
         })
 
@@ -3019,6 +3322,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           setIsPrinting(false)
           setPrintingPackageId(null)
           toast.success('Label sent to printer')
+          // Reload packages to update ordering (printed packages move to bottom)
+          loadPackages(searchTerm, statusFilter)
         }, 1000)
       } catch (error) {
         console.error('Print error:', error)
@@ -3052,8 +3357,9 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">×</button>
           </div>
           
-          <div className="mt-4">
-            <div className="relative">
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
               <input
                 type="text"
                 value={searchTerm}
@@ -3067,9 +3373,32 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                 </div>
               )}
             </div>
-            {searchTerm && (
-              <p className="text-xs text-gray-500 mt-2">
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-600 mb-1 font-semibold">{t('packages.status')}:</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white min-w-[180px]"
+                  title={t('packages.allStatuses')}
+                >
+                  <option value="all">{t('packages.allStatuses')}</option>
+                  <option value="just_created">{t('scanner.statuses.just_created')}</option>
+                  <option value="created">{t('scanner.statuses.created')}</option>
+                  <option value="queued_for_print">{t('scanner.statuses.queued_for_print')}</option>
+                  <option value="printed">{t('scanner.statuses.printed')}</option>
+                  <option value="handed_over">{t('scanner.statuses.handed_over')}</option>
+                  <option value="in_transit">{t('scanner.statuses.in_transit')}</option>
+                  <option value="at_branch">{t('scanner.statuses.at_branch')}</option>
+                  <option value="delivered">{t('scanner.statuses.delivered')}</option>
+                  <option value="returned">{t('scanner.statuses.returned')}</option>
+                  <option value="canceled">{t('scanner.statuses.canceled')}</option>
+                </select>
+              </div>
+            </div>
+            {(searchTerm || statusFilter !== 'all') && (
+              <p className="text-xs text-gray-500">
                 Found {filteredPackages.length} package{filteredPackages.length !== 1 ? 's' : ''}
+                {statusFilter !== 'all' && ` with status "${t(`scanner.statuses.${statusFilter}`)}"`}
               </p>
             )}
           </div>
@@ -3094,10 +3423,25 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                       <p className="font-mono font-medium">{selectedPackage.short_code}</p>
                     </div>
                     <div>
-                      <span className="text-sm text-gray-600">{t('packages.status')}:</span>
-                      <p className={`inline-block px-3 py-1 rounded-full text-sm ${getStatusColor(selectedPackage.status)}`}>
-                        {t(`scanner.statuses.${selectedPackage.status}`)}
-                      </p>
+                      <span className="text-sm text-gray-600 mb-2 block">{t('packages.status')}:</span>
+                      <div
+                        className={`px-3 py-2 text-sm font-semibold rounded-lg border-2 inline-block ${
+                          selectedPackage.status === 'just_created' ? 'bg-emerald-100 text-emerald-900 border-emerald-400' :
+                          selectedPackage.status === 'delivered' ? 'bg-green-100 text-green-900 border-green-400' :
+                          selectedPackage.status === 'canceled' ? 'bg-red-100 text-red-900 border-red-400' :
+                          selectedPackage.status === 'in_transit' ? 'bg-yellow-100 text-yellow-900 border-yellow-400' :
+                          selectedPackage.status === 'at_branch' ? 'bg-purple-100 text-purple-900 border-purple-400' :
+                          selectedPackage.status === 'printed' ? 'bg-indigo-100 text-indigo-900 border-indigo-400' :
+                          selectedPackage.status === 'queued_for_print' ? 'bg-orange-100 text-orange-900 border-orange-400' :
+                          selectedPackage.status === 'handed_over' ? 'bg-cyan-100 text-cyan-900 border-cyan-400' :
+                          selectedPackage.status === 'returned' ? 'bg-pink-100 text-pink-900 border-pink-400' :
+                          'bg-blue-100 text-blue-900 border-blue-400'
+                        }`}
+                        title="Package status (change via Admin tab)"
+                      >
+                        {t(`scanner.statuses.${selectedPackage.status || 'created'}`)}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Status can only be changed via Admin tab</p>
                     </div>
                     <div>
                       <span className="text-sm text-gray-600">{t('scanner.currentLocation')}:</span>
@@ -3110,9 +3454,42 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
                 
+                <div className="space-y-3">
+                  {(() => {
+                    const parsed = parsePackageContents(selectedPackage.contents_note || '')
+                    return (
+                      <>
+                        {(parsed.name || parsed.surname || parsed.company) && (
                 <div>
-                  <span className="text-sm text-gray-600">{t('scanner.contentsNote')}:</span>
-                  <p className="font-medium whitespace-pre-line">{selectedPackage.contents_note}</p>
+                            <span className="text-sm text-gray-600 font-semibold">{t('packages.recipient')}:</span>
+                            <p className="font-medium">
+                              {parsed.name} {parsed.surname}
+                              {parsed.company && ` | ${parsed.company}`}
+                            </p>
+                          </div>
+                        )}
+                        {parsed.address && (
+                          <div>
+                            <span className="text-sm text-gray-600 font-semibold">{t('packages.deliveryAddress')}:</span>
+                            <p className="font-medium whitespace-pre-line">{parsed.address}</p>
+                          </div>
+                        )}
+                        {parsed.items && parsed.items.length > 0 && (
+                          <div>
+                            <span className="text-sm text-gray-600 font-semibold">{t('packages.contents')}:</span>
+                            <p className="font-medium">
+                              {parsed.items.map((item, idx) => (
+                                <span key={idx}>
+                                  {item.product} x{item.quantity}
+                                  {idx < parsed.items.length - 1 ? ', ' : ''}
+                                </span>
+                              ))}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
                 
                 {selectedPackage.notes && (
@@ -3141,7 +3518,27 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                   >
                     <div className="flex-1">
                       <div className="font-medium text-gray-900">{pkg.short_code}</div>
-                      <div className="text-sm text-gray-600">{pkg.contents_note?.split('\n')[0] || 'No contents'}</div>
+                      {(() => {
+                        const parsed = parsePackageContents(pkg.contents_note || '')
+                        return (
+                          <div className="text-sm text-gray-600 space-y-1">
+                            {parsed.name || parsed.surname ? (
+                              <div>
+                                <span className="font-semibold">{parsed.name} {parsed.surname}</span>
+                                {parsed.company && <span className="text-gray-500"> | {parsed.company}</span>}
+                              </div>
+                            ) : null}
+                            {parsed.address && (
+                              <div className="text-xs">{parsed.address}</div>
+                            )}
+                            {parsed.items && parsed.items.length > 0 && (
+                              <div className="text-xs">
+                                {t('packages.contents')}: {parsed.items.map((item, idx) => `${item.product} x${item.quantity}`).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                       {pkg.notes && (
                         <div className="text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded mt-1 inline-block">
                           📝 {pkg.notes.substring(0, 50)}{pkg.notes.length > 50 ? '...' : ''}
@@ -3153,7 +3550,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                     </div>
                     <div className="flex items-center space-x-3">
                       <div className={`px-3 py-1 rounded-full text-sm ${getStatusColor(pkg.status)}`}>
-                        {pkg.status.replace('_', ' ')}
+                        {t(`scanner.statuses.${pkg.status}`)}
                       </div>
                       <button
                         onClick={(e) => printPackage(pkg, e)}
@@ -3188,13 +3585,21 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           position: absolute;
           left: -9999px;
           top: -9999px;
-          width: 50mm;
-          height: 30mm;
+          width: 58mm;
+          height: 40mm;
         }
 
         @media print {
+          /* Force hide everything */
+          * {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
           body * {
             visibility: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           #print-label-packages-modal,
@@ -3203,221 +3608,270 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           }
 
           #print-label-packages-modal {
-            position: absolute !important;
+            position: fixed !important;
             left: 0 !important;
             top: 0 !important;
-            width: 50mm !important;
-            height: 30mm !important;
+            width: 58mm !important;
+            height: 40mm !important;
+            max-width: 58mm !important;
+            max-height: 40mm !important;
             background: white !important;
             display: block !important;
             margin: 0 !important;
             padding: 0 !important;
             z-index: 9999 !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            page-break-before: avoid !important;
           }
 
           @page {
-            size: 50mm 30mm landscape;
-            margin: 0;
+            size: 58mm 40mm;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           html, body {
-            width: 50mm !important;
-            min-height: 30mm !important;
+            width: 58mm !important;
+            height: 40mm !important;
+            max-width: 58mm !important;
+            max-height: 40mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: visible !important;
+            overflow: hidden !important;
             background: white !important;
+            page-break-after: avoid !important;
+            page-break-before: avoid !important;
           }
 
-          /* Main Label Container - Modern Sleek Design */
+          /* Main Label Container - SIMPLE FUNCTIONAL DESIGN */
           .shipping-label {
-            width: 50mm !important;
-            min-height: 30mm !important;
-            padding: 0 !important;
+            width: 58mm !important;
+            height: 40mm !important;
+            max-width: 58mm !important;
+            max-height: 40mm !important;
+            padding: 0.5mm !important;
             box-sizing: border-box !important;
             display: flex !important;
-            flex-direction: row !important;
+            flex-direction: column !important;
             margin: 0 !important;
-            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+            background: #ffffff !important;
             color: #000 !important;
             position: relative !important;
-            border: 0.5mm solid #e5e7eb !important;
-            overflow: visible !important;
+            border: 0.2mm solid #000000 !important;
+            overflow: hidden !important;
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
           }
 
-          /* Left Section - Logo, Tracking, Recipient */
+          /* Left Section - Logo & Content */
           .label-left-section {
-            flex: 1.5 !important;
             display: flex !important;
             flex-direction: column !important;
-            padding: 1mm 1.5mm 1.5mm 1.5mm !important;
-            justify-content: flex-start !important;
-            gap: 0.5mm !important;
-            min-height: 0 !important;
-            flex-shrink: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            flex: 1 !important;
+            min-width: 0 !important;
+            height: 100% !important;
           }
 
-          /* Logo Section */
+          /* Logo Section - Simple Top Bar - ALWAYS VISIBLE */
           .logo-section {
-            margin-bottom: 0.2mm !important;
+            background: #000000 !important;
+            padding: 0.8mm !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
             flex-shrink: 0 !important;
+            height: 6mm !important;
+            max-height: 6mm !important;
+            min-height: 6mm !important;
+            visibility: visible !important;
+            opacity: 1 !important;
           }
 
           .logo {
             max-height: 5mm !important;
-            max-width: 100% !important;
+            max-width: 90% !important;
             width: auto !important;
             height: auto !important;
             display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
             object-fit: contain !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
-            margin-bottom: 0.2mm !important;
+            filter: brightness(0) invert(1) !important;
+          }
+          
+          .logo[src=""],
+          .logo:not([src]) {
+            display: none !important;
           }
 
           .logo-separator {
-            height: 0.3mm !important;
-            background: #dc2626 !important;
-            width: 100% !important;
-            margin-top: 0.4mm !important;
+            display: none !important;
           }
 
-          /* Company Section - Before tracking */
-          .company-section {
-            margin-bottom: 0.4mm !important;
-          }
-
-          /* Company Name - Secondary */
-          .company-name {
-            font-weight: 600 !important;
-            font-size: 7pt !important;
-            color: #111827 !important;
-            line-height: 1.2 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.1px !important;
-            font-family: 'Arial', sans-serif !important;
-            word-wrap: break-word !important;
-            overflow-wrap: break-word !important;
-            white-space: normal !important;
-            margin-bottom: 0.5mm !important;
-          }
-
-          /* Tracking Code Section */
+          /* Tracking Code Section - Simple */
           .tracking-code-section {
-            margin-bottom: 1mm !important;
+            padding: 0.5mm !important;
+            background: #ffffff !important;
+            border-bottom: 0.2mm solid #000000 !important;
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            flex-shrink: 0 !important;
+            gap: 0.5mm !important;
+            min-height: 3mm !important;
           }
 
           .tracking-label {
-            font-size: 1.8pt !important;
-            font-weight: 600 !important;
-            color: #111827 !important;
+            font-size: 1.5pt !important;
+            font-weight: 700 !important;
+            color: #000000 !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.2px !important;
-            margin-bottom: 0.15mm !important;
             font-family: 'Arial', sans-serif !important;
+            margin: 0 !important;
+            white-space: nowrap !important;
+            line-height: 1.2 !important;
           }
 
           .tracking-code {
-            font-size: 2.5pt !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.5px !important;
-            color: #111827 !important;
-            line-height: 1.0 !important;
+            font-size: 5pt !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.8px !important;
+            color: #000000 !important;
+            line-height: 1.3 !important;
             text-transform: uppercase !important;
             font-family: 'Courier New', 'Monaco', monospace !important;
-            padding: 0.2mm 0.3mm !important;
-            border-radius: 0.6mm !important;
-            border: 0.2mm solid #e5e7eb !important;
-            background: #f9fafb !important;
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
             display: inline-block !important;
+            flex: 1 !important;
+            text-align: right !important;
           }
 
-          /* Recipient Section - Primary content block */
+          /* Main Content Section - Recipient Info */
           .recipient-section {
             display: flex !important;
             flex-direction: column !important;
-            justify-content: flex-start !important;
+            padding: 1mm !important;
             gap: 0.5mm !important;
-            margin-top: 0.3mm !important;
-            flex: 1 1 auto !important;
+            flex: 1 !important;
+            justify-content: flex-start !important;
+            background: #ffffff !important;
+            position: relative !important;
             min-height: 0 !important;
+            overflow: hidden !important;
           }
 
-          /* Recipient Name - PRIMARY FOCAL POINT - Largest element on label */
+          /* Beneficiary Name - BIGGEST & BOLDEST */
           .recipient-name {
-            font-weight: 900 !important;
-            font-size: 14pt !important;
+            font-weight: 800 !important;
+            font-size: 10pt !important;
             margin: 0 !important;
-            margin-bottom: 0.5mm !important;
             padding: 0 !important;
-            color: #111827 !important;
-            line-height: 1.2 !important;
+            color: #000000 !important;
+            line-height: 1.3 !important;
             text-transform: uppercase !important;
             letter-spacing: 0.3px !important;
-            font-family: 'Arial Black', 'Arial', sans-serif !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
             word-wrap: break-word !important;
             overflow-wrap: break-word !important;
             white-space: normal !important;
             flex-shrink: 0 !important;
           }
 
-          /* Address - Tertiary plain text */
+          /* Company Name - MEDIUM */
+          .company-name {
+            font-weight: 600 !important;
+            font-size: 7pt !important;
+            color: #000000 !important;
+            line-height: 1.3 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.2px !important;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          .company-name::before {
+            display: none !important;
+          }
+
+          /* Address - READABLE */
           .address-text {
             font-size: 5pt !important;
-            color: #374151 !important;
+            color: #000000 !important;
             line-height: 1.3 !important;
             word-wrap: break-word !important;
             overflow-wrap: break-word !important;
             white-space: normal !important;
             font-weight: 400 !important;
             font-family: 'Arial', sans-serif !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            letter-spacing: 0.1px !important;
           }
 
-          /* Right Section - Large QR Code */
+          .address-text::before {
+            display: none !important;
+          }
+
+          /* QR Code Section - BIG & READABLE */
           .label-right-section {
-            width: 18mm !important;
+            position: absolute !important;
+            right: 0.5mm !important;
+            bottom: 0.5mm !important;
+            width: 16mm !important;
+            height: 16mm !important;
+            max-width: 16mm !important;
+            max-height: 16mm !important;
             display: flex !important;
-            flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%) !important;
-            border-left: 0.5mm dashed #d1d5db !important;
-            padding: 1.5mm !important;
+            background: #ffffff !important;
+            border: 0.2mm solid #000000 !important;
+            padding: 0.5mm !important;
             box-sizing: border-box !important;
-            flex-shrink: 0 !important;
-            align-self: stretch !important;
           }
 
-          /* QR Code - Large and Prominent */
+          /* QR Code - Clear and scannable */
           .qr-code {
-            width: 18mm !important;
-            height: 18mm !important;
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
             display: block !important;
-            flex-shrink: 0 !important;
             object-fit: contain !important;
-            border: 0.5mm solid #111827 !important;
-            padding: 1mm !important;
-            background: white !important;
-            border-radius: 1mm !important;
-            box-shadow: 0 0.5mm 1mm rgba(0, 0, 0, 0.1) !important;
+            border: none !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
             image-rendering: -webkit-optimize-contrast !important;
             image-rendering: crisp-edges !important;
           }
 
-
-          /* Items List - Compact and readable */
+          /* Items List - Very Compact */
           .items-list {
-            font-size: 5.5pt !important;
-            color: #111827 !important;
-            line-height: 1.3 !important;
+            font-size: 2.2pt !important;
+            color: #000000 !important;
+            line-height: 1.2 !important;
             font-family: 'Arial', 'Helvetica', sans-serif !important;
-            font-weight: 500 !important;
+            font-weight: 400 !important;
           }
 
           .items-list div {
-            margin-bottom: 0.2mm !important;
-            line-height: 1.3 !important;
-            padding: 0.2mm 0 !important;
+            margin-bottom: 0.05mm !important;
+            line-height: 1.2 !important;
+            padding: 0 !important;
           }
         }
       `}</style>
@@ -3699,6 +4153,7 @@ function Navigation({ currentView, onViewChange, onLogout }: {
 }
 
 function App() {
+  const location = useLocation()
   const [currentView, setCurrentView] = useState('home')
   const [showCreateLabel, setShowCreateLabel] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
@@ -3706,6 +4161,18 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showInventory, setShowInventory] = useState(false)
   const [showPackages, setShowPackages] = useState(false)
+
+  // If we're on the tracking page, render it directly
+  if (location.pathname.startsWith('/track/')) {
+    return (
+      <>
+        <Routes>
+          <Route path="/track/:code" element={<PackageTracking />} />
+        </Routes>
+        <Toaster position="top-center" />
+      </>
+    )
+  }
 
   const handleViewChange = (view: string) => {
     // Check admin access before setting view

@@ -42,6 +42,62 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
   const [isLoadingPackage, setIsLoadingPackage] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState<string | null>(null)
 
+  // Function to play beep sound on successful scan
+  const playBeepSound = async () => {
+    try {
+      // Create or get audio context for beep sound
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      let audioContext: AudioContext
+      
+      // Try to use existing context or create new one
+      if (!(window as any).beepAudioContext) {
+        audioContext = new AudioContextClass()
+        // Resume context if suspended (required for mobile browsers)
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume()
+        }
+        (window as any).beepAudioContext = audioContext
+      } else {
+        audioContext = (window as any).beepAudioContext
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume()
+        }
+      }
+
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      // Configure beep sound (800Hz, short beep)
+      oscillator.frequency.value = 800
+      oscillator.type = 'sine'
+
+      // Set volume (gain) - start loud, fade out quickly
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1)
+
+      // Play beep
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.1)
+    } catch (error) {
+      console.warn('Could not play beep sound with Web Audio API:', error)
+      // Fallback: try using HTML5 Audio if Web Audio API fails
+      try {
+        // Create a simple beep tone using Web Audio API with fallback
+        const audio = new Audio()
+        // Generate a beep using data URI (base64 encoded short beep WAV)
+        audio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoZbTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OSfTQ8MUKjj8LZjHAY4kdfyzHksBSR3x/DdkEAKGm06+uoVRQKRp/g8r5sIQUrgc7y2Yk2CBtpvfDkn00PDFCo4/C2YxwGOJHX8sx5LAUkd8fw3ZBACBppOvrqFUUCkaf4PK+bCEFK4HO8tmJNggbab3w5J9NDwxQqOPwtmMcBjiR1/LMeSwFJHfH8N2QQA=='
+        audio.volume = 0.3
+        await audio.play()
+      } catch (e) {
+        // Ignore if both methods fail - beep is optional
+        console.debug('Beep sound not available:', e)
+      }
+    }
+  }
+
   // Ensure modal shows when package is loaded
   useEffect(() => {
     if (scannedPackage) {
@@ -468,6 +524,11 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
     }
 
     console.log('[Scanner] Processing scan:', normalizedCode.substring(0, 20))
+    
+    // Play beep sound on successful scan detection (non-blocking)
+    playBeepSound().catch(() => {
+      // Ignore beep errors - it's optional feedback
+    })
     
     // IMMEDIATELY stop scanner and show loading
     setIsProcessingScan(true)
@@ -1077,7 +1138,7 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
                       {t('scanner.selectNewStatus')}
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                      {(['created', 'queued_for_print', 'printed', 'handed_over', 'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'] as PackageStatus[]).map((status) => (
+                      {(['just_created', 'created', 'queued_for_print', 'printed', 'handed_over', 'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'] as PackageStatus[]).map((status) => (
                         <button
                           key={status}
                           onClick={() => setSelectedStatus(status)}
