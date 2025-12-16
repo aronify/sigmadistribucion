@@ -17,6 +17,8 @@ import { loadLogoAsBase64, preloadLogo } from './utils/logo'
 import { generateQRCode } from './utils/qrCode'
 import { parseContentsNote, formatContentsNote } from './utils/packageParsing'
 import { labelPrintStyles } from './styles/labelPrintStyles'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
 // Get Supabase URL and key for environment check
 // @ts-ignore - Vite environment variables
@@ -677,32 +679,51 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
     console.log('Label HTML:', labelElement.innerHTML.substring(0, 200))
     console.log('Label container computed style:', window.getComputedStyle(labelContainer))
 
-    // Inject print settings to force 58mm x 40mm
+    // Inject print settings to force 58mm x 40mm for thermal printers
     const injectPrintSettings = () => {
       // Remove any existing print settings
       const existing = document.getElementById('auto-print-settings')
       if (existing) existing.remove()
       
-      // Create style element with forced print dimensions
+      // Create style element with forced print dimensions - multiple formats for thermal printer compatibility
       const printStyle = document.createElement('style')
       printStyle.id = 'auto-print-settings'
       printStyle.textContent = `
         @page {
           size: 58mm 40mm !important;
+          size: 2.283in 1.575in !important;
           margin: 0mm !important;
+          margin: 0in !important;
           padding: 0mm !important;
+          width: 58mm !important;
+          height: 40mm !important;
         }
         @media print {
           @page {
             size: 58mm 40mm !important;
+            size: 2.283in 1.575in !important;
             margin: 0mm !important;
+            margin: 0in !important;
             padding: 0mm !important;
+          }
+          @page :first {
+            size: 58mm 40mm !important;
+            size: 2.283in 1.575in !important;
+            margin: 0mm !important;
           }
           html, body {
             width: 58mm !important;
+            width: 2.283in !important;
             height: 40mm !important;
+            height: 1.575in !important;
             margin: 0mm !important;
+            margin: 0in !important;
             padding: 0mm !important;
+            padding: 0in !important;
+            overflow: hidden !important;
+          }
+          * {
+            box-sizing: border-box !important;
           }
         }
       `
@@ -3027,6 +3048,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   const [packages, setPackages] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [showPrintAllDialog, setShowPrintAllDialog] = useState(false)
+  const [isPrintingAll, setIsPrintingAll] = useState(false)
   const [selectedPackage, setSelectedPackage] = useState<any>(null)
   const [logo, setLogo] = useState<string | null>(null)
   const [isPrinting, setIsPrinting] = useState(false)
@@ -3347,32 +3370,51 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       return
     }
 
-    // Inject print settings to force 58mm x 40mm
+    // Inject print settings to force 58mm x 40mm for thermal printers
     const injectPrintSettings = () => {
       // Remove any existing print settings
       const existing = document.getElementById('auto-print-settings-packages')
       if (existing) existing.remove()
       
-      // Create style element with forced print dimensions
+      // Create style element with forced print dimensions - multiple formats for thermal printer compatibility
       const printStyle = document.createElement('style')
       printStyle.id = 'auto-print-settings-packages'
       printStyle.textContent = `
         @page {
           size: 58mm 40mm !important;
+          size: 2.283in 1.575in !important;
           margin: 0mm !important;
+          margin: 0in !important;
           padding: 0mm !important;
+          width: 58mm !important;
+          height: 40mm !important;
         }
         @media print {
           @page {
             size: 58mm 40mm !important;
+            size: 2.283in 1.575in !important;
             margin: 0mm !important;
+            margin: 0in !important;
             padding: 0mm !important;
+          }
+          @page :first {
+            size: 58mm 40mm !important;
+            size: 2.283in 1.575in !important;
+            margin: 0mm !important;
           }
           html, body {
             width: 58mm !important;
+            width: 2.283in !important;
             height: 40mm !important;
+            height: 1.575in !important;
             margin: 0mm !important;
+            margin: 0in !important;
             padding: 0mm !important;
+            padding: 0in !important;
+            overflow: hidden !important;
+          }
+          * {
+            box-sizing: border-box !important;
           }
         }
       `
@@ -3405,6 +3447,438 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     }, 300)
   }
 
+  const printAllThermal = async () => {
+    if (packages.length === 0) {
+      toast.error('No packages to print')
+      return
+    }
+
+    setShowPrintAllDialog(false)
+    setIsPrintingAll(true)
+
+    try {
+      // Print each package one by one
+      for (let i = 0; i < packages.length; i++) {
+        const pkg = packages[i]
+        await printPackage(pkg)
+        
+        // Wait a bit between prints to avoid overwhelming the printer
+        if (i < packages.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500))
+        }
+      }
+      
+      toast.success(`Successfully printed ${packages.length} labels`)
+    } catch (error) {
+      console.error('Print all error:', error)
+      toast.error('Failed to print all labels')
+    } finally {
+      setIsPrintingAll(false)
+    }
+  }
+
+  const printAllA4 = async () => {
+    if (packages.length === 0) {
+      toast.error('No packages to print')
+      return
+    }
+
+    setShowPrintAllDialog(false)
+    setIsPrintingAll(true)
+
+    try {
+      const logoBase64 = await loadLogoAsBase64()
+      const logoSrc = logoBase64 || getLogoUrl()
+
+      // Generate QR codes for all packages
+      const packagesWithQR: Array<{ pkg: any; qrCode: string | null }> = []
+      for (const pkg of packages) {
+        const qrCode = await generateQRCode(pkg.short_code)
+        packagesWithQR.push({ pkg, qrCode })
+      }
+
+      // A4 dimensions: 210mm x 297mm
+      // Label dimensions: 70mm x 31mm
+      // Margins: 10mm all around
+      // Usable space: 190mm x 277mm
+      // Labels per row: 190 / 70 = 2.7, so 2 labels per row
+      // Labels per column: 277 / 31 = 8.9, so 8 labels per column
+      // Total: 2 x 8 = 16 labels per page
+
+      const labelsPerRow = 2
+      const labelsPerColumn = 8
+      const labelsPerPage = labelsPerRow * labelsPerColumn
+      const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
+
+      let html = ''
+      
+      for (let page = 0; page < totalPages; page++) {
+        const pageStart = page * labelsPerPage
+        const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
+        const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
+
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(8, 1fr); gap: 5mm;">'
+        
+        for (let i = 0; i < labelsPerPage; i++) {
+          if (i < pagePackages.length) {
+            const { pkg, qrCode } = pagePackages[i]
+            const parsed = parsePackageContents(pkg.contents_note || '')
+            
+            html += `
+              <div class="a4-label" style="width: 70mm; height: 31mm; border: 0.5mm solid #000; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm;">
+                  <div style="font-weight: bold; font-size: 7pt;">${pkg.short_code || ''}</div>
+                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block;" onload="this.style.display='block';" onerror="this.style.display='none';" />` : '<div style="width: 12mm; height: 12mm;"></div>'}
+                </div>
+                <div style="font-weight: bold; font-size: 8pt; margin-bottom: 0.5mm; text-transform: uppercase;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+                ${parsed.company ? `<div style="font-size: 6pt; margin-bottom: 0.5mm; text-transform: uppercase;">${parsed.company}</div>` : ''}
+                ${parsed.address ? `<div style="font-size: 5pt; line-height: 1.2;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+              </div>
+            `
+          } else {
+            // Empty cell
+            html += '<div></div>'
+          }
+        }
+        
+        html += '</div>'
+      }
+
+      const printContainer = document.createElement('div')
+      printContainer.id = 'print-all-a4'
+      printContainer.innerHTML = html
+      printContainer.style.position = 'absolute'
+      printContainer.style.left = '-9999px'
+      printContainer.style.top = '-9999px'
+      document.body.appendChild(printContainer)
+
+      // Add A4 print styles
+      const printStyle = document.createElement('style')
+      printStyle.id = 'a4-print-styles'
+      printStyle.textContent = `
+        @media print {
+          @page {
+            size: A4 !important;
+            margin: 0 !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #print-all-a4,
+          #print-all-a4 * {
+            visibility: visible !important;
+          }
+          #print-all-a4 {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 210mm !important;
+          }
+          .a4-page {
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            padding: 10mm !important;
+            box-sizing: border-box !important;
+            page-break-after: always !important;
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            grid-template-rows: repeat(8, 1fr) !important;
+            gap: 5mm !important;
+          }
+          .a4-label {
+            width: 70mm !important;
+            height: 31mm !important;
+            border: 0.5mm solid #000 !important;
+            padding: 2mm !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            background: white !important;
+            position: relative !important;
+          }
+          .a4-qr-code {
+            width: 12mm !important;
+            height: 12mm !important;
+            min-width: 12mm !important;
+            min-height: 12mm !important;
+            max-width: 12mm !important;
+            max-height: 12mm !important;
+            object-fit: contain !important;
+            display: block !important;
+            image-rendering: -webkit-optimize-contrast !important;
+            image-rendering: crisp-edges !important;
+          }
+        }
+      `
+      document.head.appendChild(printStyle)
+
+      // Wait for all images to load before printing
+      const images = printContainer.querySelectorAll('img')
+      let loadedCount = 0
+      const totalImages = images.length
+      
+      const checkAllImagesLoaded = () => {
+        loadedCount++
+        if (loadedCount === totalImages || totalImages === 0) {
+          // All images loaded, trigger print
+          setTimeout(() => {
+            window.print()
+            
+            setTimeout(() => {
+              printContainer.remove()
+              printStyle.remove()
+              setIsPrintingAll(false)
+              toast.success(`Successfully printed ${packages.length} labels on A4`)
+            }, 1000)
+          }, 200)
+        }
+      }
+      
+      if (images.length > 0) {
+        images.forEach((img) => {
+          if (img.complete && (img as HTMLImageElement).naturalHeight !== 0) {
+            checkAllImagesLoaded()
+          } else {
+            img.addEventListener('load', checkAllImagesLoaded, { once: true })
+            img.addEventListener('error', checkAllImagesLoaded, { once: true })
+          }
+        })
+        
+        // Fallback timeout in case images don't load
+        setTimeout(() => {
+          if (loadedCount < totalImages) {
+            console.warn('Some images did not load, printing anyway')
+            checkAllImagesLoaded()
+          }
+        }, 3000)
+      } else {
+        // No images, print immediately
+        setTimeout(() => {
+          window.print()
+          
+          setTimeout(() => {
+            printContainer.remove()
+            printStyle.remove()
+            setIsPrintingAll(false)
+            toast.success(`Successfully printed ${packages.length} labels on A4`)
+          }, 1000)
+        }, 200)
+      }
+    } catch (error) {
+      console.error('Print all A4 error:', error)
+      toast.error('Failed to print all labels')
+      setIsPrintingAll(false)
+    }
+  }
+
+  const downloadAllA4 = async () => {
+    if (packages.length === 0) {
+      toast.error('No packages to download')
+      return
+    }
+
+    setShowPrintAllDialog(false)
+    setIsPrintingAll(true)
+
+    try {
+      // Generate QR codes for all packages
+      const packagesWithQR: Array<{ pkg: any; qrCode: string | null }> = []
+      for (const pkg of packages) {
+        const qrCode = await generateQRCode(pkg.short_code)
+        packagesWithQR.push({ pkg, qrCode })
+      }
+
+      // A4 dimensions: 210mm x 297mm
+      // Label dimensions: 70mm x 31mm
+      // Margins: 10mm all around
+      const labelsPerRow = 2
+      const labelsPerColumn = 8
+      const labelsPerPage = labelsPerRow * labelsPerColumn
+      const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
+
+      let html = ''
+      
+      for (let page = 0; page < totalPages; page++) {
+        const pageStart = page * labelsPerPage
+        const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
+        const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
+
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(8, 1fr); gap: 5mm; background: white;">'
+        
+        for (let i = 0; i < labelsPerPage; i++) {
+          if (i < pagePackages.length) {
+            const { pkg, qrCode } = pagePackages[i]
+            const parsed = parsePackageContents(pkg.contents_note || '')
+            
+            html += `
+              <div class="a4-label" style="width: 70mm; height: 31mm; border: 0.5mm solid #000; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1mm;">
+                  <div style="font-weight: bold; font-size: 7pt;">${pkg.short_code || ''}</div>
+                  ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 12mm; height: 12mm; object-fit: contain; display: block;" />` : '<div style="width: 12mm; height: 12mm;"></div>'}
+                </div>
+                <div style="font-weight: bold; font-size: 8pt; margin-bottom: 0.5mm; text-transform: uppercase;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
+                ${parsed.company ? `<div style="font-size: 6pt; margin-bottom: 0.5mm; text-transform: uppercase;">${parsed.company}</div>` : ''}
+                ${parsed.address ? `<div style="font-size: 5pt; line-height: 1.2;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
+              </div>
+            `
+          } else {
+            html += '<div></div>'
+          }
+        }
+        
+        html += '</div>'
+      }
+
+      const downloadContainer = document.createElement('div')
+      downloadContainer.id = 'download-all-a4'
+      downloadContainer.innerHTML = html
+      downloadContainer.style.position = 'absolute'
+      downloadContainer.style.left = '-9999px'
+      downloadContainer.style.top = '-9999px'
+      downloadContainer.style.width = '210mm'
+      downloadContainer.style.background = 'white'
+      
+      // Add styles for download
+      const downloadStyle = document.createElement('style')
+      downloadStyle.id = 'a4-download-styles'
+      downloadStyle.textContent = `
+        #download-all-a4 {
+          background: white !important;
+        }
+        .a4-page {
+          width: 210mm !important;
+          height: 297mm !important;
+          margin: 0 !important;
+          padding: 10mm !important;
+          box-sizing: border-box !important;
+          display: grid !important;
+          grid-template-columns: repeat(2, 1fr) !important;
+          grid-template-rows: repeat(8, 1fr) !important;
+          gap: 5mm !important;
+          background: white !important;
+          page-break-after: always !important;
+        }
+        .a4-label {
+          width: 70mm !important;
+          height: 31mm !important;
+          border: 0.5mm solid #000 !important;
+          padding: 2mm !important;
+          box-sizing: border-box !important;
+          display: flex !important;
+          flex-direction: column !important;
+          background: white !important;
+          position: relative !important;
+        }
+        .a4-qr-code {
+          width: 12mm !important;
+          height: 12mm !important;
+          min-width: 12mm !important;
+          min-height: 12mm !important;
+          max-width: 12mm !important;
+          max-height: 12mm !important;
+          object-fit: contain !important;
+          display: block !important;
+        }
+      `
+      document.head.appendChild(downloadStyle)
+      document.body.appendChild(downloadContainer)
+
+      // Wait for all images to load
+      const images = downloadContainer.querySelectorAll('img')
+      let loadedCount = 0
+      const totalImages = images.length
+      
+      const waitForImages = (): Promise<void> => {
+        return new Promise((resolve) => {
+          if (totalImages === 0) {
+            resolve()
+            return
+          }
+          
+          const checkLoaded = () => {
+            loadedCount++
+            if (loadedCount === totalImages) {
+              resolve()
+            }
+          }
+          
+          images.forEach((img) => {
+            if (img.complete && (img as HTMLImageElement).naturalHeight !== 0) {
+              checkLoaded()
+            } else {
+              img.addEventListener('load', checkLoaded, { once: true })
+              img.addEventListener('error', checkLoaded, { once: true })
+            }
+          })
+          
+          // Fallback timeout
+          setTimeout(() => {
+            if (loadedCount < totalImages) {
+              console.warn('Some images did not load, proceeding anyway')
+              resolve()
+            }
+          }, 5000)
+        })
+      }
+
+      await waitForImages()
+
+      // Give a moment for layout to settle
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Convert to canvas then PDF
+      const canvas = await html2canvas(downloadContainer, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: 794, // A4 width in pixels at 96 DPI (210mm)
+        height: 1123 * totalPages, // A4 height * number of pages
+      })
+
+      // Create PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      const imgWidth = 210 // A4 width in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      const pageHeight = 297 // A4 height in mm
+      
+      let heightLeft = imgHeight
+      let position = 0
+
+      // Add first page
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+
+      // Add additional pages if needed
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+
+      // Download PDF
+      const fileName = `labels_${new Date().toISOString().split('T')[0]}.pdf`
+      pdf.save(fileName)
+
+      // Cleanup
+      downloadContainer.remove()
+      downloadStyle.remove()
+      setIsPrintingAll(false)
+      toast.success(`Successfully downloaded ${packages.length} labels as PDF`)
+    } catch (error) {
+      console.error('Download A4 error:', error)
+      toast.error('Failed to download labels')
+      setIsPrintingAll(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 modal-enter">
       <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto smooth-transition shadow-2xl">
@@ -3425,7 +3899,16 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
               />
               <h2 className="text-lg font-semibold text-gray-900">{t('packages.title')}</h2>
             </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowPrintAllDialog(true)}
+                disabled={packages.length === 0 || isPrintingAll}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm"
+              >
+                {isPrintingAll ? 'Printing...' : 'PRINT ALL'}
+              </button>
             <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">×</button>
+            </div>
           </div>
           
           <div className="mt-4 space-y-3">
@@ -3649,6 +4132,50 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       <div id="print-label-packages-modal" className="print-label-container" style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
         {/* Content will be injected dynamically */}
       </div>
+
+      {/* Print All Dialog */}
+      {showPrintAllDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Print All Labels</h3>
+            <p className="text-gray-600 mb-6">Choose your printer type:</p>
+            
+            <div className="space-y-3">
+              <button
+                onClick={printAllThermal}
+                disabled={isPrintingAll}
+                className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
+              >
+                Thermal Printer (58mm x 40mm)
+              </button>
+              
+              <button
+                onClick={printAllA4}
+                disabled={isPrintingAll}
+                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
+              >
+                A4 Printer (7cm x 31mm per label)
+              </button>
+              
+              <button
+                onClick={downloadAllA4}
+                disabled={isPrintingAll}
+                className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-lg transition-colors"
+              >
+                Download A4 PDF
+              </button>
+              
+              <button
+                onClick={() => setShowPrintAllDialog(false)}
+                disabled={isPrintingAll}
+                className="w-full px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print Styles - Same as CreateLabelModal */}
       <style>{`

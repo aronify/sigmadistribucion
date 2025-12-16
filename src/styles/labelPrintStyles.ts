@@ -51,6 +51,7 @@ export const labelPrintStyles = `
       page-break-before: avoid !important;
     }
 
+    /* Force 58mm x 40mm for thermal printers - multiple rules for maximum compatibility */
     @page {
       size: 58mm 40mm !important;
       margin: 0mm !important;
@@ -59,13 +60,11 @@ export const labelPrintStyles = `
       height: 40mm !important;
     }
     
-    /* Force exact dimensions - override any browser defaults */
     @page :first {
       size: 58mm 40mm !important;
       margin: 0mm !important;
     }
     
-    /* Additional page rules to ensure dimensions */
     @page :left {
       size: 58mm 40mm !important;
       margin: 0mm !important;
@@ -74,6 +73,12 @@ export const labelPrintStyles = `
     @page :right {
       size: 58mm 40mm !important;
       margin: 0mm !important;
+    }
+    
+    /* Alternative size format for better thermal printer compatibility */
+    @page {
+      size: 2.283in 1.575in !important;
+      margin: 0in !important;
     }
 
     html, body {
@@ -89,12 +94,16 @@ export const labelPrintStyles = `
       page-break-before: avoid !important;
     }
 
-    /* Main Label Container */
+    /* Main Label Container - Thermal printer compatible */
     .shipping-label {
       width: 58mm !important;
+      width: 2.283in !important;
       height: 40mm !important;
+      height: 1.575in !important;
       max-width: 58mm !important;
+      max-width: 2.283in !important;
       max-height: 40mm !important;
+      max-height: 1.575in !important;
       padding: 0.5mm !important;
       box-sizing: border-box !important;
       display: flex !important;
