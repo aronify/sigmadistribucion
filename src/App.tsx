@@ -3171,10 +3171,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
     return { name, surname, company, address, items }
   }
 
-  const generateQRCode = async (shortCode: string): Promise<string | null> => {
-    // generateQRCode is now imported from utils/qrCode.ts
-    return await generateQRCode(shortCode)
-  }
+  // generateQRCode is now imported from utils/qrCode.ts - no local function needed
 
   const printPackage = async (pkg: any, e?: React.MouseEvent) => {
     if (e) {
