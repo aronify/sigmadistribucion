@@ -3501,12 +3501,12 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       // Label dimensions: 70mm x 30mm
       // Margins: 10mm all around
       // Usable space: 190mm x 277mm
-      // Labels per row: 190 / 70 = 2.7, so 2 labels per row (but user wants 8 columns, so 8 labels per row)
-      // Labels per column: 277 / 30 = 9.2, so user wants 3 rows
-      // Total: 8 columns x 3 rows = 24 labels per page
+      // Layout: 3 columns (horizontal) x 8 rows (vertical) = 24 labels per page
+      // 3 columns = 3 labels horizontally across
+      // 8 rows = 8 labels vertically down
 
-      const labelsPerRow = 8
-      const labelsPerColumn = 3
+      const labelsPerRow = 3  // 3 columns = 3 labels horizontally
+      const labelsPerColumn = 8  // 8 rows = 8 labels vertically
       const labelsPerPage = labelsPerRow * labelsPerColumn
       const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
 
@@ -3517,7 +3517,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
         const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
 
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2mm;">'
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm;">'
         
         for (let i = 0; i < labelsPerPage; i++) {
           if (i < pagePackages.length) {
@@ -3585,9 +3585,9 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             box-sizing: border-box !important;
             page-break-after: always !important;
             display: grid !important;
-            grid-template-columns: repeat(8, 1fr) !important;
-            grid-template-rows: repeat(3, minmax(auto, 1fr)) !important;
-            gap: 2mm !important;
+            grid-template-columns: repeat(3, 1fr) !important;
+            grid-template-rows: repeat(8, minmax(auto, 1fr)) !important;
+            gap: 1.5mm !important;
             align-items: start !important;
           }
           .a4-label {
@@ -3698,9 +3698,11 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       // A4 dimensions: 210mm x 297mm
       // Label dimensions: 70mm x 30mm
       // Margins: 10mm all around
-      // Layout: 8 columns x 3 rows = 24 labels per page
-      const labelsPerRow = 8
-      const labelsPerColumn = 3
+      // Layout: 3 columns (horizontal) x 8 rows (vertical) = 24 labels per page
+      // 3 columns = 3 labels horizontally across
+      // 8 rows = 8 labels vertically down
+      const labelsPerRow = 3  // 3 columns = 3 labels horizontally
+      const labelsPerColumn = 8  // 8 rows = 8 labels vertically
       const labelsPerPage = labelsPerRow * labelsPerColumn
       const totalPages = Math.ceil(packagesWithQR.length / labelsPerPage)
 
@@ -3711,7 +3713,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
         const pageEnd = Math.min(pageStart + labelsPerPage, packagesWithQR.length)
         const pagePackages = packagesWithQR.slice(pageStart, pageEnd)
 
-        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2mm; background: white;">'
+        html += '<div class="a4-page" style="width: 210mm; height: 297mm; margin: 0; padding: 10mm; box-sizing: border-box; page-break-after: always; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(8, 1fr); gap: 1.5mm; background: white;">'
         
         for (let i = 0; i < labelsPerPage; i++) {
           if (i < pagePackages.length) {
@@ -3763,9 +3765,9 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           padding: 10mm !important;
           box-sizing: border-box !important;
           display: grid !important;
-          grid-template-columns: repeat(8, 1fr) !important;
-          grid-template-rows: repeat(3, minmax(auto, 1fr)) !important;
-          gap: 2mm !important;
+          grid-template-columns: repeat(3, 1fr) !important;
+          grid-template-rows: repeat(8, minmax(auto, 1fr)) !important;
+          gap: 1.5mm !important;
           background: white !important;
           page-break-after: always !important;
           align-items: start !important;
