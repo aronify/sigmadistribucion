@@ -1330,28 +1330,14 @@ function CreateLabelModal({ onClose }: { onClose: () => void }) {
 
       {/* Print Styles */}
       <style>{`
-        /* TEMPORARY: Show label on screen to see changes - Remove this after testing! */
+        /* Hide printable label on screen; only used for print */
         #print-label {
-          position: fixed !important;
-          left: 50% !important;
-          top: 50% !important;
-          transform: translate(-50%, -50%) scale(2.5) !important;
-          width: 58mm !important;
-          min-height: 40mm !important;
-          z-index: 99999 !important;
-          background: white !important;
-          border: 4px solid red !important;
-          box-shadow: 0 0 30px rgba(0,0,0,0.7) !important;
-        }
-        
-        /* Normal behavior - uncomment this to hide label on screen */
-        /* #print-label {
           position: absolute;
           left: -9999px;
           top: -9999px;
           width: 58mm;
           min-height: 40mm;
-        } */
+        }
 
         /* Print styles - 58mm x 40mm thermal label - SINGLE PAGE ONLY */
         @media print {
