@@ -2433,6 +2433,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                       >
                         <option value="just_created">{t('scanner.statuses.just_created')}</option>
                         <option value="created">{t('scanner.statuses.created')}</option>
+                        <option value="envelope_prepared">{t('scanner.statuses.envelope_prepared')}</option>
                         <option value="queued_for_print">{t('scanner.statuses.queued_for_print')}</option>
                         <option value="printed">{t('scanner.statuses.printed')}</option>
                         <option value="handed_over">{t('scanner.statuses.handed_over')}</option>
@@ -2592,6 +2593,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                                 pkg.status === 'printed' ? 'bg-indigo-100 text-indigo-900 border-indigo-400 hover:bg-indigo-200' :
                                 pkg.status === 'queued_for_print' ? 'bg-orange-100 text-orange-900 border-orange-400 hover:bg-orange-200' :
                                 pkg.status === 'handed_over' ? 'bg-cyan-100 text-cyan-900 border-cyan-400 hover:bg-cyan-200' :
+                                pkg.status === 'envelope_prepared' ? 'bg-teal-100 text-teal-900 border-teal-400 hover:bg-teal-200' :
                                 pkg.status === 'returned' ? 'bg-pink-100 text-pink-900 border-pink-400 hover:bg-pink-200' :
                                 'bg-blue-100 text-blue-900 border-blue-400 hover:bg-blue-200'
                               }`}
@@ -2599,6 +2601,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
                             >
                               <option value="just_created">{t('scanner.statuses.just_created')}</option>
                               <option value="created">{t('scanner.statuses.created')}</option>
+                              <option value="envelope_prepared">{t('scanner.statuses.envelope_prepared')}</option>
                               <option value="queued_for_print">{t('scanner.statuses.queued_for_print')}</option>
                               <option value="printed">{t('scanner.statuses.printed')}</option>
                               <option value="handed_over">{t('scanner.statuses.handed_over')}</option>
@@ -4081,6 +4084,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                   <option value="all">{t('packages.allStatuses')}</option>
                   <option value="just_created">{t('scanner.statuses.just_created')}</option>
                   <option value="created">{t('scanner.statuses.created')}</option>
+                  <option value="envelope_prepared">{t('scanner.statuses.envelope_prepared')}</option>
                   <option value="queued_for_print">{t('scanner.statuses.queued_for_print')}</option>
                   <option value="printed">{t('scanner.statuses.printed')}</option>
                   <option value="handed_over">{t('scanner.statuses.handed_over')}</option>
@@ -4131,6 +4135,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
                           selectedPackage.status === 'printed' ? 'bg-indigo-100 text-indigo-900 border-indigo-400' :
                           selectedPackage.status === 'queued_for_print' ? 'bg-orange-100 text-orange-900 border-orange-400' :
                           selectedPackage.status === 'handed_over' ? 'bg-cyan-100 text-cyan-900 border-cyan-400' :
+                          selectedPackage.status === 'envelope_prepared' ? 'bg-teal-100 text-teal-900 border-teal-400' :
                           selectedPackage.status === 'returned' ? 'bg-pink-100 text-pink-900 border-pink-400' :
                           'bg-blue-100 text-blue-900 border-blue-400'
                         }`}

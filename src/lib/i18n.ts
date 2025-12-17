@@ -288,6 +288,7 @@ const resources = {
         statuses: {
           just_created: 'Just Created',
           created: 'Created',
+          envelope_prepared: 'Envelope Prepared',
           queued_for_print: 'Queued for Print',
           printed: 'Printed',
           handed_over: 'Handed Over',
@@ -586,6 +587,7 @@ const resources = {
         statuses: {
           just_created: 'Sapo Krijuar',
           created: 'Pakoja eshte pergatitur',
+          envelope_prepared: 'Zarfi pergatitur',
           queued_for_print: 'Gati per dergese',
           printed: 'Gati per dergese',
           handed_over: 'Per dergese nga personi kontaktit',
