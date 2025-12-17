@@ -616,7 +616,7 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
         `)
         .eq('short_code', packageId)
         .maybeSingle()
-      
+
       if (dataByCode && !errorByCode) {
         packageData = dataByCode
       } else {
@@ -630,7 +630,7 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           `)
           .eq('id', packageId)
           .maybeSingle()
-
+        
         if (dataById && !errorById) {
           packageData = dataById
         }
@@ -1208,7 +1208,7 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
                       {t('scanner.selectNewStatus')}
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                      {(['just_created', 'created', 'queued_for_print', 'printed', 'handed_over', 'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'] as PackageStatus[]).map((status) => (
+                      {(['just_created', 'created', 'envelope_prepared', 'queued_for_print', 'printed', 'handed_over', 'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'] as PackageStatus[]).map((status) => (
                         <button
                           key={status}
                           onClick={() => setSelectedStatus(status)}
@@ -1375,9 +1375,9 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           >
             <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
-          <button
-            onClick={toggleFlash}
-            disabled={!hasFlash}
+            <button
+              onClick={toggleFlash}
+              disabled={!hasFlash}
             className={`p-2 sm:p-2.5 rounded-lg transition-colors ${
               hasFlash 
                 ? flashOn 
@@ -1387,9 +1387,9 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
             }`}
             title={hasFlash ? (flashOn ? t('scanner.flashOff') : t('scanner.flash')) : t('scanner.flashUnavailable')}
             aria-label={hasFlash ? (flashOn ? t('scanner.flashOff') : t('scanner.flash')) : t('scanner.flashUnavailable')}
-          >
-            {flashOn ? <FlashlightOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Flashlight className="w-5 h-5 sm:w-6 sm:h-6" />}
-          </button>
+            >
+              {flashOn ? <FlashlightOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Flashlight className="w-5 h-5 sm:w-6 sm:h-6" />}
+            </button>
           <button
             onClick={onClose}
             className="p-2 sm:p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
