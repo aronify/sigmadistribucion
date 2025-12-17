@@ -34,6 +34,7 @@ export interface Package {
 export type PackageStatus = 
   | 'just_created'
   | 'created'
+  | 'envelope_prepared'
   | 'queued_for_print'
   | 'printed'
   | 'handed_over'

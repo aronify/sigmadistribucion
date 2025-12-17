@@ -88,7 +88,7 @@ CREATE TABLE packages (
   destination_branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
   contents_note TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN (
-    'created', 'queued_for_print', 'printed', 'handed_over', 
+    'just_created', 'created', 'envelope_prepared', 'queued_for_print', 'printed', 'handed_over', 
     'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'
   )),
   current_location TEXT NOT NULL DEFAULT 'Main Office',
@@ -101,11 +101,11 @@ CREATE TABLE package_status_history (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   package_id UUID NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
   from_status TEXT CHECK (from_status IN (
-    'created', 'queued_for_print', 'printed', 'handed_over', 
+    'just_created', 'created', 'envelope_prepared', 'queued_for_print', 'printed', 'handed_over', 
     'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'
   )),
   to_status TEXT NOT NULL CHECK (to_status IN (
-    'created', 'queued_for_print', 'printed', 'handed_over', 
+    'just_created', 'created', 'envelope_prepared', 'queued_for_print', 'printed', 'handed_over', 
     'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'
   )),
   location TEXT NOT NULL,
