@@ -107,3 +107,4 @@ export const preloadLogo = async (): Promise<string> => {
   return supabaseLogoUrl
 }
 
+
