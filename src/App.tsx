@@ -3531,8 +3531,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
           
           html += `
-            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; align-items: center; font-size: 6pt; background: white; position: relative; overflow: visible;">
-              <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding-left: 3mm;">
+            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 0 2mm 0 0; box-sizing: border-box; display: flex; align-items: center; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;">
                 <div style="font-weight: bold; font-size: 7pt; line-height: 1.1; margin-bottom: 0.5mm;">${pkg.short_code || ''}</div>
                 <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.5mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word;">
                   ${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}
@@ -3580,8 +3580,8 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
           
           html += `
-            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; align-items: center; font-size: 6pt; background: white; position: relative; overflow: visible;">
-              <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding-left: 3mm;">
+            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 0 2mm 0 0; box-sizing: border-box; display: flex; align-items: center; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;">
                 <div style="font-weight: bold; font-size: 7pt; line-height: 1.1; margin-bottom: 0.5mm;">${pkg.short_code || ''}</div>
                 <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.5mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word;">
                   ${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}
@@ -3652,10 +3652,11 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             max-width: 70mm !important;
             min-height: 36mm !important;
             border: none !important;
-            padding: 2mm !important;
+            padding: 0 2mm 0 0 !important;
             box-sizing: border-box !important;
             display: flex !important;
-            flex-direction: column !important;
+            flex-direction: row !important;
+            align-items: center !important;
             background: white !important;
             position: relative !important;
             overflow: visible !important;
