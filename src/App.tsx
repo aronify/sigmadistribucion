@@ -3490,7 +3490,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       }
 
       // A4 dimensions: 210mm x 297mm
-      // Label dimensions: 70mm x 36mm
+      // Label dimensions: 70mm x 36mm (target); content is centered to avoid cutting at page edges
       // Layout: 3 columns (horizontal) x 8 rows (vertical) = 24 labels per page
       // Place selected packages: if selectedColumn is 0, distribute across all 3 columns, otherwise in selected column
 
@@ -3531,11 +3531,11 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
           
           html += `
-            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4mm; margin-bottom: 2mm; min-height: auto;">
+            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm 2mm 2mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="display: flex; justify-content: flex-start; align-items: flex-start; margin-top: 2mm; margin-bottom: 1mm; min-height: auto;">
                 <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
-                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 20mm; height: 20mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 20mm; height: 20mm; flex-shrink: 0;"></div>'}
               </div>
+              ${qrCode ? `<div style="position: absolute; top: 50%; right: 3mm; transform: translateY(-50%); padding: 1mm; background: #ffffff; box-sizing: content-box;"><img src="${qrCode}" class="a4-qr-code" style="width: 16mm; height: 16mm; object-fit: contain; display: block;" alt="${trackingUrl}" /></div>` : ''}
               <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
               ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
               ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
@@ -3578,11 +3578,11 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
           
           html += `
-            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4mm; margin-bottom: 2mm; min-height: auto;">
+            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm 2mm 2mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="display: flex; justify-content: flex-start; align-items: flex-start; margin-top: 2mm; margin-bottom: 1mm; min-height: auto;">
                 <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
-                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 20mm; height: 20mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 20mm; height: 20mm; flex-shrink: 0;"></div>'}
               </div>
+              ${qrCode ? `<div style="position: absolute; top: 50%; right: 3mm; transform: translateY(-50%); padding: 1mm; background: #ffffff; box-sizing: content-box;"><img src="${qrCode}" class="a4-qr-code" style="width: 16mm; height: 16mm; object-fit: contain; display: block;" alt="${trackingUrl}" /></div>` : ''}
               <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
               ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
               ${parsed.address ? `<div style="font-size: 6pt; line-height: 1.2; flex: 0 0 auto; margin-top: auto;">${parsed.address.replace(/\n/g, '<br>')}</div>` : ''}
@@ -3657,12 +3657,12 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
             overflow: visible !important;
           }
           .a4-qr-code {
-            width: 20mm !important;
-            height: 20mm !important;
-            min-width: 20mm !important;
-            min-height: 20mm !important;
-            max-width: 20mm !important;
-            max-height: 20mm !important;
+            width: 16mm !important;
+            height: 16mm !important;
+            min-width: 16mm !important;
+            min-height: 16mm !important;
+            max-width: 16mm !important;
+            max-height: 16mm !important;
             object-fit: contain !important;
             display: block !important;
             flex-shrink: 0 !important;
@@ -3752,7 +3752,7 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
       }
 
       // A4 dimensions: 210mm x 297mm
-      // Label dimensions: 70mm x 36mm
+      // Label dimensions: 70mm x 36mm (target); content is centered to avoid cutting at page edges
       // Layout: 3 columns (horizontal) x 8 rows (vertical) = 24 labels per page
       // Place selected packages: if selectedColumn is 0, distribute across all 3 columns, otherwise in selected column
 
@@ -3793,10 +3793,10 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
           
           html += `
-            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4mm; margin-bottom: 2mm; min-height: auto;">
+            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm 2mm 2mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6mm; margin-bottom: 2mm; min-height: auto;">
                 <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
-                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 20mm; height: 20mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 20mm; height: 20mm; flex-shrink: 0;"></div>'}
+                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 18mm; height: 18mm; object-fit: contain; display: block; flex-shrink: 0; margin-right: 1mm;" alt="${trackingUrl}" />` : '<div style="width: 18mm; height: 18mm; flex-shrink: 0; margin-right: 1mm;"></div>'}
               </div>
               <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
               ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
@@ -3840,10 +3840,10 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           const trackingUrl = `${window.location.origin}/track/${pkg.short_code}`
           
           html += `
-            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4mm; margin-bottom: 2mm; min-height: auto;">
+            <div class="a4-label" style="width: 100%; max-width: 70mm; min-height: 36mm; border: none; padding: 2mm 2mm 2mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; font-size: 6pt; background: white; position: relative; overflow: visible;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6mm; margin-bottom: 2mm; min-height: auto;">
                 <div style="font-weight: bold; font-size: 7pt; line-height: 1.1;">${pkg.short_code || ''}</div>
-                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 20mm; height: 20mm; object-fit: contain; display: block; flex-shrink: 0;" alt="${trackingUrl}" />` : '<div style="width: 20mm; height: 20mm; flex-shrink: 0;"></div>'}
+                ${qrCode ? `<img src="${qrCode}" class="a4-qr-code" style="width: 18mm; height: 18mm; object-fit: contain; display: block; flex-shrink: 0; margin-right: 1mm;" alt="${trackingUrl}" />` : '<div style="width: 18mm; height: 18mm; flex-shrink: 0; margin-right: 1mm;"></div>'}
               </div>
               <div style="font-weight: bold; font-size: 9pt; margin-bottom: 0.8mm; margin-top: 0.3mm; text-transform: uppercase; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; flex: 0 0 auto;">${((parsed.name || '') + ' ' + (parsed.surname || '')).trim() || 'N/A'}</div>
               ${parsed.company ? `<div style="font-size: 7pt; margin-bottom: 0.4mm; text-transform: uppercase; line-height: 1.2; flex: 0 0 auto;">${parsed.company}</div>` : ''}
@@ -3906,12 +3906,12 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
           overflow: visible !important;
         }
         .a4-qr-code {
-          width: 20mm !important;
-          height: 20mm !important;
-          min-width: 20mm !important;
-          min-height: 20mm !important;
-          max-width: 20mm !important;
-          max-height: 20mm !important;
+          width: 16mm !important;
+          height: 16mm !important;
+          min-width: 16mm !important;
+          min-height: 16mm !important;
+          max-width: 16mm !important;
+          max-height: 16mm !important;
           object-fit: contain !important;
           display: block !important;
           flex-shrink: 0 !important;
