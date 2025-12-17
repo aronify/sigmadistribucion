@@ -256,14 +256,12 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
           console.log('Starting camera with facingMode: environment (mobile)')
           
           const mobileConfig: any = {
-            fps: 60, // Increased FPS for faster scanning
+            fps: 60, // High FPS for faster scanning
             qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
-              // Larger scanning box for mobile (easier to use) - use 90% for better detection
-              const minEdgePercentage = 0.90
-              const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight) * minEdgePercentage
+              // Use 100% of viewfinder for maximum scanning area - easier to scan from far away
               return {
-                width: Math.floor(minEdgeSize),
-                height: Math.floor(minEdgeSize)
+                width: Math.floor(viewfinderWidth),
+                height: Math.floor(viewfinderHeight)
               }
             },
             aspectRatio: 1.0,
@@ -272,7 +270,12 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
             videoConstraints: {
               facingMode: 'environment',
               focusMode: 'continuous', // Auto-focus for better scanning
-              exposureMode: 'continuous'
+              exposureMode: 'continuous',
+              width: { ideal: 1920 }, // Higher resolution for better detection from distance
+              height: { ideal: 1080 }
+            },
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true // Use native barcode detector if available (faster)
             }
           }
 
@@ -375,20 +378,20 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
       setCameraId(selectedCamera.id)
 
       const config = {
-        fps: 60, // Increased FPS for faster scanning
+        fps: 60, // High FPS for faster scanning
         qrbox: function(viewfinderWidth: number, viewfinderHeight: number) {
-          // Larger scanning box for faster detection - 85% for better coverage
-          const minEdgePercentage = 0.85
-          const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight) * minEdgePercentage
-          const qrboxSize = Math.floor(minEdgeSize)
+          // Use 100% of viewfinder for maximum scanning area - easier to scan from far away
           return {
-            width: qrboxSize,
-            height: qrboxSize
+            width: Math.floor(viewfinderWidth),
+            height: Math.floor(viewfinderHeight)
           }
         },
         aspectRatio: 1.0,
         verbose: false,
         disableFlip: false, // Allow auto-flip for better scanning
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true // Use native barcode detector if available (faster)
+        },
         supportedScanTypes: [Html5Qrcode.SCAN_TYPE_CAMERA]
       }
 
@@ -398,10 +401,15 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
         selectedCamera.id,
         {
           fps: config.fps,
-          qrbox: config.qrbox, // Use dynamic sizing
+          qrbox: config.qrbox, // Use dynamic sizing (100% of viewfinder)
           aspectRatio: config.aspectRatio,
           disableFlip: config.disableFlip,
-          supportedScanTypes: config.supportedScanTypes
+          supportedScanTypes: config.supportedScanTypes,
+          experimentalFeatures: config.experimentalFeatures,
+          videoConstraints: {
+            width: { ideal: 1920 }, // Higher resolution for better detection from distance
+            height: { ideal: 1080 }
+          }
         },
           (decodedText, decodedResult) => {
             // Only process if we have valid text
@@ -549,14 +557,14 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
       return
     }
 
-    // Throttle: prevent same code from re-triggering within 1 second
-    // Also prevent any scan within 100ms for performance (reduced from 500ms for faster response)
-    if (lastScanTime && now.getTime() - lastScanTime.getTime() < 100) {
+    // Throttle: prevent same code from re-triggering within 500ms
+    // Reduced to 50ms for faster response and better performance
+    if (lastScanTime && now.getTime() - lastScanTime.getTime() < 50) {
       return
     }
     
-    // If same code was just scanned, ignore for 1 second (reduced from 3 seconds for faster re-scanning)
-    if (lastScannedCode === normalizedCode && lastScanTime && now.getTime() - lastScanTime.getTime() < 1000) {
+    // If same code was just scanned, ignore for 500ms (reduced for faster re-scanning)
+    if (lastScannedCode === normalizedCode && lastScanTime && now.getTime() - lastScanTime.getTime() < 500) {
       return
     }
 
