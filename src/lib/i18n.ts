@@ -298,6 +298,12 @@ const resources = {
           returned: 'Returned',
           canceled: 'Canceled',
         },
+        singleScan: 'Single Scan',
+        bulkUpdate: 'Bulk Update',
+        selectStatusForBulk: 'Select Status for Bulk Update',
+        selectStatusFirst: 'Select status first',
+        scanToUpdate: 'Scan packages to update them to',
+        updated: 'Updated',
       },
     }
   },
@@ -597,6 +603,12 @@ const resources = {
           returned: 'Kthyer',
           canceled: 'Do dergohet me vone',
         },
+        singleScan: 'Skanim i Vetëm',
+        bulkUpdate: 'Përditësim në Masë',
+        selectStatusForBulk: 'Zgjidhni Statusin për Përditësim në Masë',
+        selectStatusFirst: 'Zgjidhni statusin fillimisht',
+        scanToUpdate: 'Skanoni paketat për t\'i përditësuar në',
+        updated: 'Përditësuar',
       },
     }
   }

@@ -41,6 +41,9 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null)
   const [isLoadingPackage, setIsLoadingPackage] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState<string | null>(null)
+  const [scanMode, setScanMode] = useState<'single' | 'bulk'>('single')
+  const [bulkSelectedStatus, setBulkSelectedStatus] = useState<PackageStatus | null>(null)
+  const [bulkUpdatedPackages, setBulkUpdatedPackages] = useState<Array<{ code: string; success: boolean; error?: string }>>([])
 
   // Function to play beep sound on successful scan
   const playBeepSound = async () => {
@@ -537,8 +540,14 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
       return
     }
     
-    // Prevent processing if modal is already showing
-    if (scannedPackage) {
+    // In bulk mode, check if status is selected
+    if (scanMode === 'bulk' && !bulkSelectedStatus) {
+      toast.error(t('scanner.selectStatusFirst'), { duration: 2000 })
+      return
+    }
+    
+    // Prevent processing if modal is already showing (only in single mode)
+    if (scannedPackage && scanMode === 'single') {
       console.log('[Scanner] ⏸️  Modal already open, ignoring scan...')
       return
     }
@@ -650,9 +659,70 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
         setIsProcessingScan(false)
         setIsLoadingPackage(false)
         setNotFoundCode(normalizedCode)
+        
+        // In bulk mode, add to failed list
+        if (scanMode === 'bulk') {
+          setBulkUpdatedPackages(prev => [...prev, { code: normalizedCode, success: false, error: 'Package not found' }])
+          // Restart scanning immediately in bulk mode
+          setTimeout(() => setIsScanning(true), 500)
+        }
         return
       }
 
+      // BULK MODE: Automatically update status if status is selected
+      if (scanMode === 'bulk' && bulkSelectedStatus) {
+        const currentStatus = packageData.status
+        const currentLocation = packageData.current_location || 'Main Office'
+        
+        // Update package status
+        const { error: updateError } = await supabase
+          .from('packages')
+          .update({
+            status: bulkSelectedStatus,
+            current_location: currentLocation
+          })
+          .eq('id', packageData.id)
+
+        if (updateError) {
+          console.error('Bulk update error:', updateError)
+          toast.error(`${packageData.short_code}: ${updateError.message}`, { duration: 2000 })
+          setBulkUpdatedPackages(prev => [...prev, { 
+            code: packageData.short_code, 
+            success: false, 
+            error: updateError.message 
+          }])
+        } else {
+          // Record status history
+          await supabase
+            .from('package_status_history')
+            .insert({
+              package_id: packageData.id,
+              from_status: currentStatus,
+              to_status: bulkSelectedStatus,
+              location: currentLocation,
+              scanned_by: user?.id || '',
+              scanned_at: new Date().toISOString(),
+              note: 'Bulk update via QR scanner'
+            })
+          
+          // Record the scan
+          await recordScan(packageData.id, normalizedCode, format, currentLocation)
+          
+          toast.success(`${packageData.short_code} → ${t(`scanner.statuses.${bulkSelectedStatus}`)}`, { duration: 1500 })
+          setBulkUpdatedPackages(prev => [...prev, { 
+            code: packageData.short_code, 
+            success: true 
+          }])
+        }
+        
+        // Restart scanning immediately in bulk mode
+        setIsProcessingScan(false)
+        setIsLoadingPackage(false)
+        setTimeout(() => setIsScanning(true), 300)
+        return
+      }
+
+      // SINGLE MODE: Show package details modal
       // Fetch status history for timeline
       const { data: historyData } = await supabase
         .from('package_status_history')
@@ -1283,13 +1353,15 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
 
                             if (updateError) {
                               console.error('Status update error:', updateError)
-                              toast.error(t('scanner.errorUpdating'))
+                              // Show more detailed error message
+                              const errorMsg = updateError.message || updateError.code || 'Unknown error'
+                              toast.error(`${t('scanner.errorUpdating')}: ${errorMsg}`)
                               setIsProcessingScan(false)
                               return
                             }
 
                             // Record status history with user, timestamp, location, and note
-                            await supabase
+                            const { error: historyError } = await supabase
                               .from('package_status_history')
                               .insert({
                                 package_id: scannedPackage.id,
@@ -1300,6 +1372,12 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
                                 scanned_at: new Date().toISOString(),
                                 note: updateNote || null
                               })
+
+                            if (historyError) {
+                              console.error('Status history error:', historyError)
+                              // Don't fail the whole operation if history fails, but log it
+                              console.warn('Failed to record status history, but status was updated')
+                            }
 
                             toast.success(t('scanner.packageUpdated', { code: scannedPackage.short_code }))
 
@@ -1336,9 +1414,21 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
                             setIsProcessingScan(false)
 
                             toast.success(t('scanner.statusUpdated'), { duration: 2000 })
-                          } catch (error) {
+                            
+                            // Automatically close modal and return to QR scanning after a short delay
+                            setTimeout(() => {
+                              setShowStatusModal(false)
+                              setScannedPackage(null)
+                              setSelectedStatus(null)
+                              setUpdateNote('')
+                              setStatusHistory([])
+                              setIsScanning(true)
+                            }, 1500) // Wait 1.5 seconds to show success message
+                          } catch (error: any) {
                             console.error('Error updating status:', error)
-                            toast.error(t('scanner.errorUpdating'))
+                            // Show detailed error message
+                            const errorMsg = error?.message || error?.code || 'Unknown error'
+                            toast.error(`${t('scanner.errorUpdating')}: ${errorMsg}`)
                             setIsProcessingScan(false)
                           }
                         }}
@@ -1372,17 +1462,50 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
       {/* Header - Simplified for Mobile */}
-      <div className="bg-white/95 backdrop-blur-sm p-3 sm:p-4 flex items-center justify-between border-b border-gray-200 z-30 relative">
-        <h2 className="text-base sm:text-lg font-semibold text-gray-900">{t('scanner.title')}</h2>
-        <div className="flex items-center space-x-1 sm:space-x-2">
-          <button
-            onClick={resetScanner}
-            className="p-2 sm:p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            title={t('scanner.reset')}
-            aria-label={t('scanner.reset')}
-          >
-            <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
+      <div className="bg-white/95 backdrop-blur-sm p-3 sm:p-4 border-b border-gray-200 z-30 relative">
+        {/* Mode Tabs */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex bg-gray-100 rounded-lg p-1 w-full max-w-xs">
+            <button
+              onClick={() => {
+                setScanMode('single')
+                setBulkSelectedStatus(null)
+                setBulkUpdatedPackages([])
+                if (!isScanning) setIsScanning(true)
+              }}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                scanMode === 'single'
+                  ? 'bg-white text-red-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {t('scanner.singleScan')}
+            </button>
+            <button
+              onClick={() => {
+                setScanMode('bulk')
+                setScannedPackage(null)
+                setShowStatusModal(false)
+                if (!isScanning) setIsScanning(true)
+              }}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                scanMode === 'bulk'
+                  ? 'bg-white text-red-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {t('scanner.bulkUpdate')}
+            </button>
+          </div>
+          <div className="flex items-center space-x-1 sm:space-x-2">
+            <button
+              onClick={resetScanner}
+              className="p-2 sm:p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              title={t('scanner.reset')}
+              aria-label={t('scanner.reset')}
+            >
+              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
             <button
               onClick={toggleFlash}
               disabled={!hasFlash}
@@ -1398,15 +1521,63 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
             >
               {flashOn ? <FlashlightOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Flashlight className="w-5 h-5 sm:w-6 sm:h-6" />}
             </button>
-          <button
-            onClick={onClose}
-            className="p-2 sm:p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            title={t('scanner.close')}
-            aria-label={t('scanner.close')}
-          >
-            <XCircle className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
+            <button
+              onClick={onClose}
+              className="p-2 sm:p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              title={t('scanner.close')}
+              aria-label={t('scanner.close')}
+            >
+              <XCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
+          </div>
         </div>
+        
+        {/* Bulk Mode Status Selector */}
+        {scanMode === 'bulk' && (
+          <div className="mt-3">
+            <label className="block text-xs font-semibold text-gray-700 mb-2">
+              {t('scanner.selectStatusForBulk')}:
+            </label>
+            <select
+              value={bulkSelectedStatus || ''}
+              onChange={(e) => {
+                setBulkSelectedStatus(e.target.value as PackageStatus || null)
+                setBulkUpdatedPackages([])
+              }}
+              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white text-sm font-semibold"
+            >
+              <option value="">{t('scanner.selectStatusFirst')}</option>
+              {(['just_created', 'created', 'envelope_prepared', 'queued_for_print', 'printed', 'handed_over', 'in_transit', 'at_branch', 'delivered', 'returned', 'canceled'] as PackageStatus[]).map((status) => (
+                <option key={status} value={status}>
+                  {t(`scanner.statuses.${status}`)}
+                </option>
+              ))}
+            </select>
+            {bulkSelectedStatus && (
+              <p className="mt-2 text-xs text-gray-600">
+                {t('scanner.scanToUpdate')}: <span className="font-bold text-red-600">{t(`scanner.statuses.${bulkSelectedStatus}`)}</span>
+              </p>
+            )}
+          </div>
+        )}
+        
+        {/* Bulk Update Results */}
+        {scanMode === 'bulk' && bulkUpdatedPackages.length > 0 && (
+          <div className="mt-3 max-h-32 overflow-y-auto bg-gray-50 rounded-lg p-2 border border-gray-200">
+            <p className="text-xs font-semibold text-gray-700 mb-1">
+              {t('scanner.updated')}: {bulkUpdatedPackages.filter(p => p.success).length} / {bulkUpdatedPackages.length}
+            </p>
+            <div className="space-y-1">
+              {bulkUpdatedPackages.slice(-5).map((pkg, idx) => (
+                <div key={idx} className={`text-xs px-2 py-1 rounded ${
+                  pkg.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {pkg.code} {pkg.success ? '✓' : `✗ ${pkg.error}`}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Floating Close Button for Mobile - Always Visible */}
