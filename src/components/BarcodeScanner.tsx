@@ -1342,23 +1342,47 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
                             const currentStatus = scannedPackage.status
                             const currentLocation = scannedPackage.current_location || 'Main Office'
 
+                            console.log('[Status Update] Attempting to update:', {
+                              packageId: scannedPackage.id,
+                              packageCode: scannedPackage.short_code,
+                              fromStatus: currentStatus,
+                              toStatus: selectedStatus
+                            })
+
                             // Update package status - single transaction
-                            const { error: updateError } = await supabase
+                            const { data: updateData, error: updateError } = await supabase
                               .from('packages')
                               .update({
                                 status: selectedStatus,
                                 current_location: currentLocation
                               })
                               .eq('id', scannedPackage.id)
+                              .select()
+
+                            console.log('[Status Update] Update result:', { updateData, updateError })
 
                             if (updateError) {
-                              console.error('Status update error:', updateError)
+                              console.error('[Status Update] Error details:', {
+                                message: updateError.message,
+                                code: updateError.code,
+                                details: updateError.details,
+                                hint: updateError.hint
+                              })
                               // Show more detailed error message
                               const errorMsg = updateError.message || updateError.code || 'Unknown error'
-                              toast.error(`${t('scanner.errorUpdating')}: ${errorMsg}`)
+                              toast.error(`${t('scanner.errorUpdating')}: ${errorMsg}`, { duration: 5000 })
                               setIsProcessingScan(false)
                               return
                             }
+
+                            if (!updateData || updateData.length === 0) {
+                              console.error('[Status Update] No data returned from update')
+                              toast.error(t('scanner.errorUpdating') + ': No package was updated', { duration: 5000 })
+                              setIsProcessingScan(false)
+                              return
+                            }
+
+                            console.log('[Status Update] Success! Updated package:', updateData[0])
 
                             // Record status history with user, timestamp, location, and note
                             const { error: historyError } = await supabase
@@ -1433,6 +1457,7 @@ export function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) 
                           }
                         }}
                         disabled={!selectedStatus || selectedStatus === scannedPackage.status || isProcessingScan}
+                        title={!selectedStatus ? t('scanner.selectStatus') : selectedStatus === scannedPackage.status ? 'Status is already ' + t(`scanner.statuses.${selectedStatus}`) : ''}
                         className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 sm:py-3 px-4 sm:px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-sm sm:text-base"
                       >
                         {isProcessingScan ? t('scanner.saving') : t('scanner.confirmSave')}
